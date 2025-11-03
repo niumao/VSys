@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electron 布局示例</title>
+  <link rel="stylesheet" href="./renderer/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 左侧栏 -->
+    <aside class="sidebar">
+        <div class="device-selector">
+          <select id="wifi-devices" disabled>
+            <option value="">无设备</option>
+          </select>
+        </div>
+	<div class="device-timer">
+	  <button id="timer-btn" class="sidebar-btn timer-btn" disabled>00:00:00</button>
+        </div>
+        <button class="sidebar-btn">scrcpy</button>
+        <button class="sidebar-btn">launch app</button>
+        <button class="sidebar-btn">quit app</button>
+        <button class="sidebar-btn">shutdown</button>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <h2>主内容显示区域</h2>
+      <p>这里将展示具体内容...</p>
+    </main>
+
+    <!-- 底部栏 -->
+    <footer class="bottom-bar">
+      <div class="status-info">状态提示：准备就绪</div>
+      <div class="action-hint">panda operate sys,提示：点击左侧按钮执行操作</div>
+    </footer>
+  </div>
+
+  <script src="./renderer/js/app.js"></script>
+</body>
+</html>

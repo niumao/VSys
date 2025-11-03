@@ -1,0 +1,19 @@
+{
+  "name": "vsys",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "NODE_ENV=development electron . --no-sandbox",
+    "test": "NODE_ENV=development electron .",
+    "build": "electron-builder"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^38.4.0",
+    "electron-reload": "^2.0.0-alpha.1",
+    "udev": "^1.0.1"
+  }
+}

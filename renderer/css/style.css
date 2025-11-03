@@ -1,0 +1,148 @@
+/* 全局样式重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: Arial, sans-serif;
+}
+
+/* 应用容器占满整个窗口 */
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  /* 左侧1/5，主内容4/5 */
+  grid-template-columns: 1fr 8fr;
+  /* 顶部占4/5，底部占1/5 */
+  grid-template-rows: 18fr 1fr;
+  grid-template-areas:
+    "sidebar main"
+    "bottom bottom";
+}
+
+/* 左侧栏样式 */
+.sidebar {
+  grid-area: sidebar;
+  background-color: #f0f0f0;
+  padding: 20px;
+  border-right: 1px solid #ccc;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.sidebar-btn {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  background-color: #4285f4;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.sidebar-btn:hover {
+  background-color: #3367d6;
+}
+
+/* 主内容区样式 */
+.main-content {
+  grid-area: main;
+  padding: 20px;
+  overflow: auto; /* 内容超出时可滚动 */
+}
+
+.main-content h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+/* 底部栏样式 */
+.bottom-bar {
+  grid-area: bottom;
+  background-color: #2c3e50;
+  color: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #1a252f;
+}
+
+.status-info {
+  font-weight: bold;
+}
+
+.action-hint {
+  color: #bdc3c7;
+  font-size: 0.9em;
+}
+
+/* 设备选择器样式 */
+.device-selector {
+  #margin-top: auto; /* 推到左侧栏底部 */
+  padding-top: 15px;
+  border-top: 1px dashed #ccc;
+}
+
+.device-selector label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+  color: #666;
+}
+
+#wifi-devices {
+  width: 100%;
+  padding: 6px;
+  font-size: 0.85em;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+}
+
+/* 定时器按钮样式（整合显示与状态色） */
+.device-timer {
+  padding-bottom: 15px;
+  border-bottom: 1px dashed #ccc;
+}
+
+.device-timer label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+  color: #666;
+}
+
+/* 定时器按钮基础样式 */
+.timer-btn {
+  width: 100%;
+  padding: 10px 0;
+  font-family: monospace; /* 等宽字体，时间对齐更美观 */
+  font-size: 0.9em;
+  border-radius: 3px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+/* 状态色区分：未开始（蓝色）、运行中（红色）、已停止（绿色） */
+.timer-btn.stopped {
+  background-color: #4285f4; /* 蓝色：可开始 */
+  color: white;
+}
+
+.timer-btn.running {
+  background-color: #2ecc71; /* 红色：运行中 */
+  color: white;
+}
+
+.timer-btn.paused {
+  background-color: #e74c3c; /* 绿色：已暂停（可归零） */
+  color: white;
+}
+
+.timer-btn:disabled {
+  background-color: #ccc; /* 灰色：禁用 */
+  color: #666;
+  cursor: not-allowed;
+}
