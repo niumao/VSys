@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const udev = require('udev');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const electronReload = require('electron-reload');
 
 if (process.env.NODE_ENV !== 'production') {
@@ -14,6 +14,9 @@ if (process.env.NODE_ENV !== 'production') {
 let wifiDevices = [];
 let mainWindow;
 let processingDevices = new Set(); // 正在处理的设备集合
+let scrcpyProcesses = {}; // 存储 scrcpy 进程 { displayId: process }
+let displayCheckInterval = null; // display 状态检查定时器
+let currentDevice = null; // 当前选中的设备
 
 // 通用 ADB 命令执行函数
 // delayBefore: true = 延迟后执行（delay and run），false = 执行后延迟（run and delay）
@@ -183,6 +186,7 @@ function createWindow() {
   mainWindow.loadFile('index.html');
   //mainWindow.webContents.openDevTools();
 
+  //checkenv();
   initAdb();
   monitorUsbDevices();
 }
@@ -195,4 +199,199 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+// 检查 display 的 mHasContent 状态
+async function checkDisplayContent(deviceId) {
+  try {
+    const result = await execAdbCommand(
+      `adb -s ${deviceId} shell dumpsys display`, 
+      { encoding: 'utf8' }
+    );
+    
+    const displays = {};
+    
+    // 解析 display 信息
+    const displayMatches = result.matchAll(/mDisplayId=(\d+)[\s\S]*?mHasContent=(true|false)/g);
+    for (const match of displayMatches) {
+      const displayId = match[1];
+      const hasContent = match[2] === 'true';
+      displays[displayId] = hasContent;
+    }
+    
+    return displays;
+  } catch (error) {
+    console.error('检查 display 状态失败:', error.message);
+    return {};
+  }
+}
+
+// 启动 scrcpy 进程
+function startScrcpy(deviceId, displayId, position = 'center') {
+  // 如果已经在运行，先停止
+  if (scrcpyProcesses[displayId]) {
+    stopScrcpy(displayId);
+  }
+  
+  // 获取主窗口位置和大小
+  const mainBounds = mainWindow.getBounds();
+  
+  // 计算 main-content 区域的位置（左侧栏占1/9，即约133px）
+  const sidebarWidth = Math.floor(mainBounds.width / 9);
+  const mainContentX = mainBounds.x + sidebarWidth;
+  const mainContentY = mainBounds.y;
+  const mainContentWidth = mainBounds.width - sidebarWidth;
+  const mainContentHeight = mainBounds.height - 50; // 减去底部栏高度
+  
+  let windowX, windowY, windowWidth, windowHeight;
+  
+  if (position === 'bottom') {
+    // menubar (displayId=3) 在下方
+    windowWidth = mainContentWidth;
+    windowHeight = Math.floor(mainContentHeight / 6); // 下方占1/6高度
+    windowX = mainContentX;
+    windowY = mainBounds.y + mainContentHeight - windowHeight;
+  } else {
+    // center window (displayId=9 或 14) 在中间
+    windowWidth = Math.floor(mainContentWidth * 0.8);
+    windowHeight = Math.floor((mainContentHeight - Math.floor(mainContentHeight / 6)) * 0.9); // 减去 menubar 高度
+    windowX = mainContentX + Math.floor((mainContentWidth - windowWidth) / 2);
+    windowY = mainBounds.y + Math.floor((mainContentHeight - windowHeight - Math.floor(mainContentHeight / 6)) / 2);
+  }
+  
+  const scrcpyArgs = [
+    '--display-id=' + displayId,
+    '--window-borderless',
+    '--always-on-top',
+    '--window-x=' + windowX,
+    '--window-y=' + windowY,
+    '--window-width=' + windowWidth,
+    '--window-height=' + windowHeight,
+    '--window-title=Display' + displayId,
+    '-s', deviceId
+  ];
+  
+  console.log('启动 scrcpy:', 'scrcpy', scrcpyArgs.join(' '));
+  
+  const scrcpyProcess = spawn('scrcpy', scrcpyArgs, {
+    detached: false,
+    stdio: 'ignore'
+  });
+  
+  scrcpyProcess.on('error', (error) => {
+    console.error(`scrcpy 启动失败 (displayId=${displayId}):`, error.message);
+    mainWindow?.webContents.send('show-hint', `scrcpy 启动失败: ${error.message}`);
+  });
+  
+  scrcpyProcess.on('exit', (code) => {
+    console.log(`scrcpy 进程退出 (displayId=${displayId}), 退出码: ${code}`);
+    delete scrcpyProcesses[displayId];
+  });
+  
+  scrcpyProcesses[displayId] = scrcpyProcess;
+  mainWindow?.webContents.send('show-hint', `已启动 display ${displayId}`);
+}
+
+// 停止 scrcpy 进程
+function stopScrcpy(displayId) {
+  const process = scrcpyProcesses[displayId];
+  if (process) {
+    try {
+      process.kill();
+      delete scrcpyProcesses[displayId];
+      console.log(`已停止 scrcpy (displayId=${displayId})`);
+    } catch (error) {
+      console.error(`停止 scrcpy 失败 (displayId=${displayId}):`, error.message);
+    }
+  }
+}
+
+// 停止所有 scrcpy 进程
+function stopAllScrcpy() {
+  Object.keys(scrcpyProcesses).forEach(displayId => {
+    stopScrcpy(displayId);
+  });
+  
+  // 停止检查定时器
+  if (displayCheckInterval) {
+    clearInterval(displayCheckInterval);
+    displayCheckInterval = null;
+  }
+}
+
+// 启动 scrcpy 监控
+async function startScrcpyMonitoring(deviceId) {
+  currentDevice = deviceId;
+  
+  // 先停止之前的监控
+  stopAllScrcpy();
+  
+  // 立即检查一次
+  await updateDisplays();
+  
+  // 每1秒检查一次 display 状态
+  displayCheckInterval = setInterval(async () => {
+    await updateDisplays();
+  }, 1000);
+  
+  mainWindow?.webContents.send('show-hint', `已开始监控设备 ${deviceId}`);
+}
+
+// 更新 display 显示状态
+async function updateDisplays() {
+  if (!currentDevice) return;
+  
+  const displays = await checkDisplayContent(currentDevice);
+  
+  // 检查 menubar (displayId=3) - 始终显示在下方
+  if (displays['3']) {
+    if (!scrcpyProcesses['3']) {
+      startScrcpy(currentDevice, '3', 'bottom');
+    }
+  } else {
+    if (scrcpyProcesses['3']) {
+      stopScrcpy('3');
+    }
+  }
+  
+  // 检查 center window (displayId=9 或 14)
+  // 优先显示 displayId=9，如果没有则显示 displayId=14
+  let centerDisplayId = null;
+  if (displays['9']) {
+    centerDisplayId = '9';
+  } else if (displays['14']) {
+    centerDisplayId = '14';
+  }
+  
+  // 启动或停止 center window
+  if (centerDisplayId) {
+    // 停止另一个 center display
+    const otherCenterId = centerDisplayId === '9' ? '14' : '9';
+    if (scrcpyProcesses[otherCenterId]) {
+      stopScrcpy(otherCenterId);
+    }
+    
+    // 启动当前 center display
+    if (!scrcpyProcesses[centerDisplayId]) {
+      startScrcpy(currentDevice, centerDisplayId, 'center');
+    }
+  } else {
+    // 两个都不显示，停止所有 center displays
+    if (scrcpyProcesses['9']) stopScrcpy('9');
+    if (scrcpyProcesses['14']) stopScrcpy('14');
+  }
+}
+
+// IPC 监听器
+ipcMain.on('start-scrcpy', (event, deviceId) => {
+  if (!deviceId) {
+    mainWindow?.webContents.send('show-hint', '请先选择设备');
+    return;
+  }
+  startScrcpyMonitoring(deviceId);
+});
+
+ipcMain.on('stop-scrcpy', () => {
+  stopAllScrcpy();
+  mainWindow?.webContents.send('show-hint', '已停止所有 scrcpy');
 });

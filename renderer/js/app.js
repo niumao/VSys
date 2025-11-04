@@ -208,4 +208,29 @@ document.addEventListener('DOMContentLoaded', () => {
   devicesSelect = document.getElementById('wifi-devices');
   
   initTimer();
+  initScrcpy();
 });
+
+// 初始化 scrcpy 按钮
+function initScrcpy() {
+  const scrcpyBtn = document.getElementById('scrcpy-btn');
+  const stopScrcpyBtn = document.getElementById('stop-scrcpy-btn');
+  
+  if (scrcpyBtn) {
+    scrcpyBtn.addEventListener('click', () => {
+      if (!currentDevice) {
+        console.log('请先选择设备');
+        return;
+      }
+      // 启动 scrcpy 监控
+      window.electronAPI.startScrcpy(currentDevice);
+    });
+  }
+  
+  if (stopScrcpyBtn) {
+    stopScrcpyBtn.addEventListener('click', () => {
+      // 停止所有 scrcpy
+      window.electronAPI.stopScrcpy();
+    });
+  }
+}
