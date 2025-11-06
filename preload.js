@@ -6,5 +6,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onWifiDevicesUpdate: (callback) => ipcRenderer.on('update-wifi-devices', (_, devices) => callback(devices)),
   getWifiDevices: () => ipcRenderer.send('get-wifi-devices'),
   startScrcpy: (deviceId) => ipcRenderer.send('start-scrcpy', deviceId),
-  stopScrcpy: () => ipcRenderer.send('stop-scrcpy')
+  stopScrcpy: () => ipcRenderer.send('stop-scrcpy'),
+  shutdown: () => ipcRenderer.send('shutdown-app')
 });

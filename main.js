@@ -395,3 +395,66 @@ ipcMain.on('stop-scrcpy', () => {
   stopAllScrcpy();
   mainWindow?.webContents.send('show-hint', '已停止所有 scrcpy');
 });
+
+// 关闭应用和电脑
+ipcMain.on('shutdown-app', async () => {
+  try {
+    mainWindow?.webContents.send('show-hint', '正在关闭所有设备...');
+    
+    // 1. 停止所有 scrcpy 进程
+    stopAllScrcpy();
+    
+    // 2. 断开所有 WiFi 设备连接
+    if (wifiDevices.length > 0) {
+      for (const device of wifiDevices) {
+        try {
+          await execAdbCommand(`adb disconnect ${device}`, { stdio: 'pipe' });
+          console.log(`已断开设备: ${device}`);
+        } catch (error) {
+          console.error(`断开设备失败 ${device}:`, error.message);
+        }
+      }
+    }
+    
+    // 3. 停止 adb server
+    try {
+      await execAdbCommand('adb kill-server', { stdio: 'pipe' });
+      console.log('ADB server 已关闭');
+    } catch (error) {
+      console.error('关闭 ADB server 失败:', error.message);
+    }
+    
+    // 4. 关闭电脑
+    mainWindow?.webContents.send('show-hint', '正在关闭电脑...');
+    console.log('正在关闭电脑...');
+    
+    // 延迟1秒后关闭电脑
+    setTimeout(() => {
+      try {
+        // Linux 系统关机命令
+        execSync('shutdown now', { stdio: 'pipe' });
+      } catch (error) {
+        console.error('关闭电脑失败:', error.message);
+        // 如果 shutdown 失败，尝试使用 poweroff
+        try {
+          execSync('poweroff', { stdio: 'pipe' });
+        } catch (e) {
+          console.error('poweroff 也失败:', e.message);
+        }
+      }
+      
+      // 退出应用
+      app.quit();
+    }, 1000);
+    
+  } catch (error) {
+    console.error('关闭应用失败:', error.message);
+    // 即使失败也尝试关闭电脑
+    try {
+      execSync('shutdown now', { stdio: 'pipe' });
+    } catch (e) {
+      console.error('关闭电脑失败:', e.message);
+    }
+    app.quit();
+  }
+});

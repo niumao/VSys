@@ -215,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function initScrcpy() {
   const scrcpyBtn = document.getElementById('scrcpy-btn');
   const stopScrcpyBtn = document.getElementById('stop-scrcpy-btn');
+  const shutdownBtn = document.getElementById('shutdown-btn');
   
   if (scrcpyBtn) {
     scrcpyBtn.addEventListener('click', () => {
@@ -231,6 +232,13 @@ function initScrcpy() {
     stopScrcpyBtn.addEventListener('click', () => {
       // 停止所有 scrcpy
       window.electronAPI.stopScrcpy();
+    });
+  }
+  
+  if (shutdownBtn) {
+    shutdownBtn.addEventListener('click', () => {
+      // 关闭所有设备并退出应用
+      window.electronAPI.shutdown();
     });
   }
 }
