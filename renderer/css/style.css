@@ -146,3 +146,30 @@
   color: #666;
   cursor: not-allowed;
 }
+
+/* 电池信息样式 */
+.battery-info {
+  padding: 10px 0;
+  border-bottom: 1px dashed #ccc;
+}
+
+.battery-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 0.85em;
+}
+
+.battery-label {
+  color: #666;
+  min-width: 50px;
+  margin-right: 5px;
+}
+
+#battery-level,
+#battery-status,
+#battery-health,
+#battery-scale {
+  color: #333;
+  font-weight: bold;
+}

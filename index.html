@@ -15,12 +15,31 @@
             <option value="">无设备</option>
           </select>
         </div>
+        <div class="battery-info">
+          <div class="battery-item">
+            <span class="battery-label">电量:</span>
+            <span id="battery-level">--</span>
+            <span>%</span>
+          </div>
+          <div class="battery-item">
+            <span class="battery-label">状态:</span>
+            <span id="battery-status">--</span>
+          </div>
+          <div class="battery-item">
+            <span class="battery-label">健康:</span>
+            <span id="battery-health">--</span>
+          </div>
+          <div class="battery-item">
+            <span class="battery-label">容量:</span>
+            <span id="battery-scale">--</span>
+          </div>
+        </div>
 	<div class="device-timer">
 	  <button id="timer-btn" class="sidebar-btn timer-btn" disabled>00:00:00</button>
         </div>
         <button id="scrcpy-btn" class="sidebar-btn">scrcpy</button>
         <button id="stop-scrcpy-btn" class="sidebar-btn">stop scrcpy</button>
-        <button class="sidebar-btn">quit app</button>
+        <button id="quit-app-btn" class="sidebar-btn">quit app</button>
         <button id="shutdown-btn" class="sidebar-btn">shutdown</button>
     </aside>
 

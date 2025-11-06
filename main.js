@@ -17,6 +17,7 @@ let processingDevices = new Set(); // 正在处理的设备集合
 let scrcpyProcesses = {}; // 存储 scrcpy 进程 { displayId: process }
 let displayCheckInterval = null; // display 状态检查定时器
 let currentDevice = null; // 当前选中的设备
+let batteryCheckInterval = null; // 电池状态检查定时器
 
 // 通用 ADB 命令执行函数
 // delayBefore: true = 延迟后执行（delay and run），false = 执行后延迟（run and delay）
@@ -404,7 +405,10 @@ ipcMain.on('shutdown-app', async () => {
     // 1. 停止所有 scrcpy 进程
     stopAllScrcpy();
     
-    // 2. 断开所有 WiFi 设备连接
+    // 2. 停止电池监控
+    stopBatteryMonitoring();
+    
+    // 3. 断开所有 WiFi 设备连接
     if (wifiDevices.length > 0) {
       for (const device of wifiDevices) {
         try {
@@ -416,7 +420,7 @@ ipcMain.on('shutdown-app', async () => {
       }
     }
     
-    // 3. 停止 adb server
+    // 4. 停止 adb server
     try {
       await execAdbCommand('adb kill-server', { stdio: 'pipe' });
       console.log('ADB server 已关闭');
@@ -424,7 +428,7 @@ ipcMain.on('shutdown-app', async () => {
       console.error('关闭 ADB server 失败:', error.message);
     }
     
-    // 4. 关闭电脑
+    // 5. 关闭电脑
     mainWindow?.webContents.send('show-hint', '正在关闭电脑...');
     console.log('正在关闭电脑...');
     
@@ -457,4 +461,160 @@ ipcMain.on('shutdown-app', async () => {
     }
     app.quit();
   }
+});
+
+// 获取电池信息
+async function getBatteryInfo(deviceId) {
+  try {
+    const result = await execAdbCommand(
+      `adb -s ${deviceId} shell dumpsys battery`, 
+      { encoding: 'utf8' }
+    );
+    
+    const batteryInfo = {
+      level: '--',
+      status: '--',
+      health: '--',
+      scale: '--'
+    };
+    
+    // 解析电池信息
+    const levelMatch = result.match(/level:\s*(\d+)/);
+    const statusMatch = result.match(/status:\s*(\d+)/);
+    const healthMatch = result.match(/health:\s*(\d+)/);
+    const scaleMatch = result.match(/scale:\s*(\d+)/);
+    
+    if (levelMatch) batteryInfo.level = levelMatch[1];
+    if (statusMatch) {
+      // 状态码转换为文字
+      const statusCode = parseInt(statusMatch[1]);
+      const statusMap = {
+        1: '未知',
+        2: '充电中',
+        3: '放电中',
+        4: '未充电',
+        5: '已充满'
+      };
+      batteryInfo.status = statusMap[statusCode] || statusMatch[1];
+    }
+    if (healthMatch) {
+      // 健康状态码转换为文字
+      const healthCode = parseInt(healthMatch[1]);
+      const healthMap = {
+        1: '未知',
+        2: '良好',
+        3: '过热',
+        4: '损坏',
+        5: '过压',
+        6: '故障',
+        7: '低温'
+      };
+      batteryInfo.health = healthMap[healthCode] || healthMatch[1];
+    }
+    if (scaleMatch) batteryInfo.scale = scaleMatch[1];
+    
+    return batteryInfo;
+  } catch (error) {
+    console.error('获取电池信息失败:', error.message);
+    return {
+      level: '--',
+      status: '--',
+      health: '--',
+      scale: '--'
+    };
+  }
+}
+
+// 启动电池信息监控
+function startBatteryMonitoring(deviceId) {
+  // 先停止之前的监控
+  stopBatteryMonitoring();
+  
+  // 立即获取一次
+  updateBatteryInfo(deviceId);
+  
+  // 每5秒更新一次电池信息
+  batteryCheckInterval = setInterval(() => {
+    updateBatteryInfo(deviceId);
+  }, 5000);
+}
+
+// 更新电池信息
+async function updateBatteryInfo(deviceId) {
+  if (!deviceId) return;
+  
+  const batteryInfo = await getBatteryInfo(deviceId);
+  mainWindow?.webContents.send('update-battery-info', batteryInfo);
+}
+
+// 停止电池信息监控
+function stopBatteryMonitoring() {
+  if (batteryCheckInterval) {
+    clearInterval(batteryCheckInterval);
+    batteryCheckInterval = null;
+  }
+  
+  // 重置显示
+  mainWindow?.webContents.send('update-battery-info', {
+    level: '--',
+    status: '--',
+    health: '--',
+    scale: '--'
+  });
+}
+
+// IPC 监听器 - 启动电池监控
+ipcMain.on('start-battery-monitoring', (event, deviceId) => {
+  if (!deviceId) return;
+  startBatteryMonitoring(deviceId);
+});
+
+// IPC 监听器 - 停止电池监控
+ipcMain.on('stop-battery-monitoring', () => {
+  stopBatteryMonitoring();
+});
+
+// 获取当前焦点应用并强制停止
+async function quitCurrentApp(deviceId) {
+  try {
+    // 获取当前焦点窗口
+    const result = await execAdbCommand(
+      `adb -s ${deviceId} shell dumpsys window | grep mCurrentFocus`,
+      { encoding: 'utf8' }
+    );
+    
+    console.log('当前焦点窗口:', result.trim());
+    
+    // 解析包名，格式: mCurrentFocus=Window{... u0 com.example.app/com.example.app.MainActivity}
+    const match = result.match(/u\d+\s+([^\s\/]+)/);
+    
+    if (match && match[1]) {
+      const packageName = match[1];
+      console.log('提取到的包名:', packageName);
+      
+      // 强制停止应用
+      await execAdbCommand(
+        `adb -s ${deviceId} shell am force-stop ${packageName}`,
+        { encoding: 'utf8' }
+      );
+      
+      mainWindow?.webContents.send('show-hint', `已强制停止: ${packageName}`);
+      console.log(`已强制停止应用: ${packageName}`);
+    } else {
+      mainWindow?.webContents.send('show-hint', '未找到当前运行的应用');
+      console.log('无法解析包名，原始输出:', result);
+    }
+  } catch (error) {
+    console.error('强制停止应用失败:', error.message);
+    mainWindow?.webContents.send('show-hint', `停止应用失败: ${error.message}`);
+  }
+}
+
+// IPC 监听器 - 强制停止当前应用
+ipcMain.on('quit-current-app', (event, deviceId) => {
+  if (!deviceId) {
+    mainWindow?.webContents.send('show-hint', '请先选择设备');
+    return;
+  }
+  quitCurrentApp(deviceId);
 });

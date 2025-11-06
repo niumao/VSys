@@ -16,6 +16,13 @@ function initTimer() {
 
     currentDevice = newDevice;
     loadDeviceState(currentDevice);
+    
+    // 切换设备时更新电池监控
+    if (newDevice) {
+      window.electronAPI.startBatteryMonitoring(newDevice);
+    } else {
+      window.electronAPI.stopBatteryMonitoring();
+    }
   });
 
   timerBtn.addEventListener('click', () => {
@@ -151,6 +158,8 @@ function updateDevicesSelect(devices) {
     timerBtn.disabled = true;
     currentDevice = null;
     clearInterval(timerInterval);
+    // 停止电池监控
+    window.electronAPI.stopBatteryMonitoring();
     return;
   }
 
@@ -175,6 +184,8 @@ function updateDevicesSelect(devices) {
     currentDevice = devices[0];
     devicesSelect.value = currentDevice;
     loadDeviceState(currentDevice); // 加载默认设备状态
+    // 启动电池监控
+    window.electronAPI.startBatteryMonitoring(currentDevice);
   }
 }
 
@@ -202,6 +213,25 @@ window.electronAPI.onHint((message) => {
   }
 });
 
+// 监听电池信息更新
+window.electronAPI.onBatteryInfoUpdate((batteryInfo) => {
+  console.log('电池信息更新:', batteryInfo);
+  updateBatteryDisplay(batteryInfo);
+});
+
+// 更新电池信息显示
+function updateBatteryDisplay(batteryInfo) {
+  const levelEl = document.getElementById('battery-level');
+  const statusEl = document.getElementById('battery-status');
+  const healthEl = document.getElementById('battery-health');
+  const scaleEl = document.getElementById('battery-scale');
+  
+  if (levelEl) levelEl.textContent = batteryInfo.level;
+  if (statusEl) statusEl.textContent = batteryInfo.status;
+  if (healthEl) healthEl.textContent = batteryInfo.health;
+  if (scaleEl) scaleEl.textContent = batteryInfo.scale;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // 初始化DOM元素引用
   timerBtn = document.getElementById('timer-btn');
@@ -215,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function initScrcpy() {
   const scrcpyBtn = document.getElementById('scrcpy-btn');
   const stopScrcpyBtn = document.getElementById('stop-scrcpy-btn');
+  const quitAppBtn = document.getElementById('quit-app-btn');
   const shutdownBtn = document.getElementById('shutdown-btn');
   
   if (scrcpyBtn) {
@@ -232,6 +263,17 @@ function initScrcpy() {
     stopScrcpyBtn.addEventListener('click', () => {
       // 停止所有 scrcpy
       window.electronAPI.stopScrcpy();
+    });
+  }
+  
+  if (quitAppBtn) {
+    quitAppBtn.addEventListener('click', () => {
+      if (!currentDevice) {
+        console.log('请先选择设备');
+        return;
+      }
+      // 强制停止当前应用
+      window.electronAPI.quitCurrentApp(currentDevice);
     });
   }
   
