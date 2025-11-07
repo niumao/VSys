@@ -206,24 +206,29 @@ app.on('activate', () => {
 async function checkDisplayContent(deviceId) {
   try {
     const result = await execAdbCommand(
-      `adb -s ${deviceId} shell dumpsys display`, 
+      `adb -s ${deviceId} shell "dumpsys display | grep -E 'mDisplayId=|mHasContent=|mPrimaryDisplayDevice='"`, 
       { encoding: 'utf8' }
     );
     
-    const displays = {};
+    const displays = [];
     
-    // 解析 display 信息
-    const displayMatches = result.matchAll(/mDisplayId=(\d+)[\s\S]*?mHasContent=(true|false)/g);
-    for (const match of displayMatches) {
-      const displayId = match[1];
-      const hasContent = match[2] === 'true';
-      displays[displayId] = hasContent;
+    // 使用正则表达式一次性匹配所有 display 块（只匹配 hasContent=true）
+    const displayRegex = /mDisplayId=(\d+)[\s\S]*?mHasContent=true[\s\S]*?mPrimaryDisplayDevice=(.+)/g;
+    const matches = result.matchAll(displayRegex);
+    
+    for (const match of matches) {
+      displays.push({
+        displayId: match[1],
+        hasContent: true,  // 确定是 true，因为正则只匹配 true
+        deviceName: match[2].trim()
+      });
     }
     
+    console.log('解析到的 display 信息:', displays);
     return displays;
   } catch (error) {
     console.error('检查 display 状态失败:', error.message);
-    return {};
+    return [];
   }
 }
 
@@ -247,13 +252,13 @@ function startScrcpy(deviceId, displayId, position = 'center') {
   let windowX, windowY, windowWidth, windowHeight;
   
   if (position === 'bottom') {
-    // menubar (displayId=3) 在下方
+    // menubar (NS_WINDOW_short_cut) 在下方
     windowWidth = mainContentWidth;
     windowHeight = Math.floor(mainContentHeight / 6); // 下方占1/6高度
     windowX = mainContentX;
     windowY = mainBounds.y + mainContentHeight - windowHeight;
   } else {
-    // center window (displayId=9 或 14) 在中间
+    // center window (NS_APP[...]) 在中间
     windowWidth = Math.floor(mainContentWidth * 0.8);
     windowHeight = Math.floor((mainContentHeight - Math.floor(mainContentHeight / 6)) * 0.9); // 减去 menubar 高度
     windowX = mainContentX + Math.floor((mainContentWidth - windowWidth) / 2);
@@ -344,42 +349,79 @@ async function updateDisplays() {
   
   const displays = await checkDisplayContent(currentDevice);
   
-  // 检查 menubar (displayId=3) - 始终显示在下方
-  if (displays['3']) {
-    if (!scrcpyProcesses['3']) {
-      startScrcpy(currentDevice, '3', 'bottom');
+  // 查找 menubar (NS_WINDOW_short_cut) - 始终显示在下方
+  // displays 中只包含 hasContent=true 的项，所以不需要再判断 hasContent
+  const menubarDisplay = displays.find(d => 
+    d.deviceName === 'NS_WINDOW_short_cut'
+  );
+  
+  console.log('找到的 menubar:', menubarDisplay);
+  
+  if (menubarDisplay) {
+    if (!scrcpyProcesses[menubarDisplay.displayId]) {
+      console.log(`启动 menubar displayId=${menubarDisplay.displayId}`);
+      startScrcpy(currentDevice, menubarDisplay.displayId, 'bottom');
     }
   } else {
-    if (scrcpyProcesses['3']) {
-      stopScrcpy('3');
+    // 停止所有可能的 menubar 进程
+    const runningMenubar = displays.find(d => 
+      d.deviceName === 'NS_WINDOW_short_cut' && scrcpyProcesses[d.displayId]
+    );
+    if (runningMenubar) {
+      console.log(`停止 menubar displayId=${runningMenubar.displayId}`);
+      stopScrcpy(runningMenubar.displayId);
     }
   }
   
-  // 检查 center window (displayId=9 或 14)
-  // 优先显示 displayId=9，如果没有则显示 displayId=14
-  let centerDisplayId = null;
-  if (displays['9']) {
-    centerDisplayId = '9';
-  } else if (displays['14']) {
-    centerDisplayId = '14';
+  // 查找 center window (NS_APP[...])
+  // 优先显示 NS_APP[com.pvr.appmanager]，如果没有则显示 NS_APP[com.picovr.send.lbplayer]
+  const centerDisplays = displays.filter(d => 
+    d.deviceName === 'NS_APP[com.pvr.appmanager]' ||
+    d.deviceName === 'NS_APP[com.picovr.send.lbplayer]'
+  );
+  
+  let centerDisplay = null;
+  // 优先选择 appmanager
+  centerDisplay = centerDisplays.find(d => d.deviceName === 'NS_APP[com.pvr.appmanager]');
+  // 如果没有，选择 lbplayer
+  if (!centerDisplay) {
+    centerDisplay = centerDisplays.find(d => d.deviceName === 'NS_APP[com.picovr.send.lbplayer]');
   }
+  
+  console.log('找到的 center display:', centerDisplay);
   
   // 启动或停止 center window
-  if (centerDisplayId) {
-    // 停止另一个 center display
-    const otherCenterId = centerDisplayId === '9' ? '14' : '9';
-    if (scrcpyProcesses[otherCenterId]) {
-      stopScrcpy(otherCenterId);
-    }
+  if (centerDisplay) {
+    // 停止其他所有 center displays
+    const allCenterDisplays = displays.filter(d => 
+      d.deviceName === 'NS_APP[com.pvr.appmanager]' ||
+      d.deviceName === 'NS_APP[com.picovr.send.lbplayer]'
+    );
+    
+    allCenterDisplays.forEach(d => {
+      if (d.displayId !== centerDisplay.displayId && scrcpyProcesses[d.displayId]) {
+        stopScrcpy(d.displayId);
+      }
+    });
     
     // 启动当前 center display
-    if (!scrcpyProcesses[centerDisplayId]) {
-      startScrcpy(currentDevice, centerDisplayId, 'center');
+    if (!scrcpyProcesses[centerDisplay.displayId]) {
+      console.log(`启动 center window displayId=${centerDisplay.displayId}, deviceName=${centerDisplay.deviceName}`);
+      startScrcpy(currentDevice, centerDisplay.displayId, 'center');
     }
   } else {
-    // 两个都不显示，停止所有 center displays
-    if (scrcpyProcesses['9']) stopScrcpy('9');
-    if (scrcpyProcesses['14']) stopScrcpy('14');
+    // 没有 center window，停止所有可能的 center displays
+    console.log('没有找到活动的 center window');
+    const allCenterDisplays = displays.filter(d => 
+      d.deviceName === 'NS_APP[com.pvr.appmanager]' ||
+      d.deviceName === 'NS_APP[com.picovr.send.lbplayer]'
+    );
+    
+    allCenterDisplays.forEach(d => {
+      if (scrcpyProcesses[d.displayId]) {
+        stopScrcpy(d.displayId);
+      }
+    });
   }
 }
 
