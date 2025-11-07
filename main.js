@@ -106,6 +106,23 @@ async function connectDeviceViaWifi(usbDeviceId) {
     
     await execAdbCommand(`adb connect ${deviceIp}:5555`, { stdio: 'pipe' }, 1800);
     mainWindow?.webContents.send('show-hint', `已通过WiFi连接设备: ${deviceIp}:5555`);
+    
+    // 清理不需要的后台进程
+    const wifiDeviceId = `${deviceIp}:5555`;
+    try {
+      await execAdbCommand(`adb -s ${wifiDeviceId} shell am force-stop com.picovr.updatesystem`, { stdio: 'pipe' });
+      console.log('已停止 com.picovr.updatesystem');
+    } catch (error) {
+      console.error('停止 updatesystem 失败:', error.message);
+    }
+    
+    try {
+      await execAdbCommand(`adb -s ${wifiDeviceId} shell am force-stop com.pvr.home`, { stdio: 'pipe' });
+      console.log('已停止 com.pvr.home');
+    } catch (error) {
+      console.error('停止 pvr.home 失败:', error.message);
+    }
+    
     setTimeout(refreshWifiDevices, 1000);
   } catch (error) {
     console.error('WiFi连接失败:', error.message);
