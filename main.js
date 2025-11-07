@@ -408,7 +408,24 @@ ipcMain.on('shutdown-app', async () => {
     // 2. 停止电池监控
     stopBatteryMonitoring();
     
-    // 3. 断开所有 WiFi 设备连接
+    // 3. 关闭所有设备（使用 reboot -p 命令）
+    if (wifiDevices.length > 0) {
+      for (const device of wifiDevices) {
+        try {
+          // 先关闭设备电源
+          await execAdbCommand(`adb -s ${device} shell reboot -p`, { stdio: 'pipe' });
+          console.log(`已关闭设备: ${device}`);
+        } catch (error) {
+          console.error(`关闭设备失败 ${device}:`, error.message);
+        }
+      }
+      
+      // 等待设备完全关闭
+      mainWindow?.webContents.send('show-hint', '等待设备关闭...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    
+    // 4. 断开所有 WiFi 设备连接
     if (wifiDevices.length > 0) {
       for (const device of wifiDevices) {
         try {
@@ -420,7 +437,7 @@ ipcMain.on('shutdown-app', async () => {
       }
     }
     
-    // 4. 停止 adb server
+    // 5. 停止 adb server
     try {
       await execAdbCommand('adb kill-server', { stdio: 'pipe' });
       console.log('ADB server 已关闭');
@@ -428,7 +445,7 @@ ipcMain.on('shutdown-app', async () => {
       console.error('关闭 ADB server 失败:', error.message);
     }
     
-    // 5. 关闭电脑
+    // 6. 关闭电脑
     mainWindow?.webContents.send('show-hint', '正在关闭电脑...');
     console.log('正在关闭电脑...');
     
@@ -449,7 +466,7 @@ ipcMain.on('shutdown-app', async () => {
       
       // 退出应用
       app.quit();
-    }, 1000);
+    }, 3000);
     
   } catch (error) {
     console.error('关闭应用失败:', error.message);
