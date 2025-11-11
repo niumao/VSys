@@ -6,9 +6,9 @@
   "scripts": {
     "start": "NODE_ENV=development electron . --no-sandbox",
     "test": "NODE_ENV=development electron .",
-    "build": "electron-builder --linux --x64 --arm64",
-    "build:x64": "electron-builder --linux --x64",
-    "build:arm64": "electron-builder --linux --arm64"
+    "build": "NODE_ENV=production electron-builder --linux --x64 --arm64",
+    "build:x64": "NODE_ENV=production electron-builder --linux --x64",
+    "build:arm64": "NODE_ENV=production electron-builder --linux --arm64"
   },
   "keywords": ["android", "device", "management"],
   "author": "",
@@ -26,14 +26,8 @@
     "productName": "VSys",
     "linux": {
       "target": [
-        {
-          "target": "AppImage",
-          "arch": ["x64", "arm64"]
-        },
-        {
-          "target": "deb",
-          "arch": ["x64", "arm64"]
-        }
+        "AppImage",
+        "deb"
       ],
       "category": "Utility",
       "maintainer": "VSys Team"

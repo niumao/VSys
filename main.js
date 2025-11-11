@@ -2,13 +2,23 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const udev = require('udev');
 const { execSync, spawn } = require('child_process');
-const electronReload = require('electron-reload');
 
-if (process.env.NODE_ENV !== 'production') {
-  electronReload(__dirname, {
-    electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
-    delay: 1000
-  });
+// 根据是否打包设置环境变量
+if (app.isPackaged && !process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
+
+// 只在开发环境中加载 electron-reload
+if (!app.isPackaged) {
+  try {
+    const electronReload = require('electron-reload');
+    electronReload(__dirname, {
+      electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
+      delay: 1000
+    });
+  } catch (error) {
+    console.log('electron-reload 未安装或不可用');
+  }
 }
 
 let wifiDevices = [];
@@ -52,6 +62,118 @@ ipcMain.on('get-wifi-devices', () => {
   console.log('收到设备列表请求，当前设备:', wifiDevices);
   mainWindow?.webContents.send('update-wifi-devices', wifiDevices);
 });
+
+// 检查环境依赖
+async function checkEnvironment() {
+  const status = {
+    adb: { available: false, message: '' },
+    scrcpy: { available: false, message: '' },
+    libudev: { available: false, message: '' }
+  };
+  
+  // 检查 adb
+  try {
+    execSync('which adb', { stdio: 'pipe' });
+    const version = execSync('adb --version', { encoding: 'utf8' });
+    status.adb.available = true;
+    status.adb.message = `ADB 可用: ${version.split('\n')[0]}`;
+    console.log('✓', status.adb.message);
+  } catch (error) {
+    status.adb.message = 'ADB 未安装或不在 PATH 中';
+    console.error('✗', status.adb.message);
+  }
+  
+  // 检查 scrcpy
+  try {
+    execSync('which scrcpy', { stdio: 'pipe' });
+    const version = execSync('scrcpy --version', { encoding: 'utf8' });
+    status.scrcpy.available = true;
+    status.scrcpy.message = `scrcpy 可用: ${version.split('\n')[0]}`;
+    console.log('✓', status.scrcpy.message);
+  } catch (error) {
+    status.scrcpy.message = 'scrcpy 未安装或不在 PATH 中';
+    console.error('✗', status.scrcpy.message);
+  }
+  
+  // 检查 libudev
+  try {
+    // 尝试通过 ldconfig 检查 libudev
+    const ldconfig = execSync('ldconfig -p | grep libudev', { encoding: 'utf8' });
+    if (ldconfig.includes('libudev.so')) {
+      status.libudev.available = true;
+      status.libudev.message = 'libudev 可用';
+      console.log('✓', status.libudev.message);
+    } else {
+      status.libudev.message = 'libudev 未找到';
+      console.error('✗', status.libudev.message);
+    }
+  } catch (error) {
+    // 如果 ldconfig 失败，尝试直接检查常见路径
+    try {
+      const fs = require('fs');
+      const commonPaths = [
+        '/lib/x86_64-linux-gnu/libudev.so.1',
+        '/usr/lib/x86_64-linux-gnu/libudev.so.1',
+        '/lib64/libudev.so.1',
+        '/usr/lib64/libudev.so.1'
+      ];
+      
+      const found = commonPaths.some(p => {
+        try {
+          return fs.existsSync(p);
+        } catch (e) {
+          return false;
+        }
+      });
+      
+      if (found) {
+        status.libudev.available = true;
+        status.libudev.message = 'libudev 可用';
+        console.log('✓', status.libudev.message);
+      } else {
+        status.libudev.message = 'libudev 未找到，请安装 libudev-dev';
+        console.error('✗', status.libudev.message);
+      }
+    } catch (e) {
+      status.libudev.message = 'libudev 检查失败';
+      console.error('✗', status.libudev.message);
+    }
+  }
+  
+  return status;
+}
+
+// 处理环境检查结果
+async function handleEnvironmentCheck() {
+  console.log('正在检查环境依赖...');
+  const envStatus = await checkEnvironment();
+  
+  // 检查是否所有依赖都可用
+  const missingDeps = [];
+  if (!envStatus.adb.available) missingDeps.push(envStatus.adb.message);
+  if (!envStatus.scrcpy.available) missingDeps.push(envStatus.scrcpy.message);
+  if (!envStatus.libudev.available) missingDeps.push(envStatus.libudev.message);
+  
+  if (missingDeps.length > 0) {
+    const errorMsg = '环境检查失败:\n' + missingDeps.join('\n');
+    console.error(errorMsg);
+    
+    // 等待窗口加载后显示提示
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow?.webContents.send('show-hint', errorMsg);
+    });
+    
+    // 如果 adb 不可用，返回 false
+    if (!envStatus.adb.available) {
+      console.error('ADB 不可用，跳过初始化');
+      return false;
+    }
+  } else {
+    console.log('✓ 所有环境依赖检查通过');
+  }
+  
+  return true;
+}
 
 async function initAdb() {
   try {
@@ -193,7 +315,7 @@ function monitorUsbDevices() {
   });
 }
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -204,7 +326,10 @@ function createWindow() {
   mainWindow.loadFile('index.html');
   //mainWindow.webContents.openDevTools();
 
-  //checkenv();
+  // 检查环境依赖
+  const envOk = await handleEnvironmentCheck();
+  if (!envOk) return;
+  
   initAdb();
   monitorUsbDevices();
 }
