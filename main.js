@@ -31,6 +31,8 @@ let batteryCheckInterval = null; // 电池状态检查定时器
 // 通用 ADB 命令执行函数
 // delayBefore: true = 延迟后执行（delay and run），false = 执行后延迟（run and delay）
 function execAdbCommand(command, options = {}, delayMs = 100, delayBefore = false) {
+  console.log('[ADB]', command);
+  
   return new Promise((resolve, reject) => {
     if (delayBefore) {
       // 延迟后执行（delay and run）
@@ -39,6 +41,7 @@ function execAdbCommand(command, options = {}, delayMs = 100, delayBefore = fals
           const result = execSync(command, options);
           resolve(result);
         } catch (error) {
+          console.error('[ADB ERROR]', command, '-', error.message);
           reject(error);
         }
       }, delayMs);
@@ -51,6 +54,7 @@ function execAdbCommand(command, options = {}, delayMs = 100, delayBefore = fals
           resolve(result);
         }, delayMs);
       } catch (error) {
+        console.error('[ADB ERROR]', command, '-', error.message);
         reject(error);
       }
     }
