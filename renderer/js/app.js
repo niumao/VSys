@@ -150,27 +150,34 @@ function updateTimerState(state) {
 }
 
 function updateDevicesSelect(devices) {
+  console.log('[DEBUG] updateDevicesSelect: 更新设备列表, 设备数量:', devices.length, '设备:', devices);
   const prevDevices = Object.keys(deviceTimerStates); // 之前已存在的设备
+  console.log('[DEBUG] updateDevicesSelect: 之前的设备:', prevDevices);
 
   if (devices.length === 0) {
+    console.log('[DEBUG] updateDevicesSelect: 没有设备，清空列表');
     devicesSelect.innerHTML = '<option value="">无设备</option>';
     devicesSelect.disabled = true;
     timerBtn.disabled = true;
     currentDevice = null;
     clearInterval(timerInterval);
     // 停止电池监控
+    console.log('[DEBUG] updateDevicesSelect: 停止电池监控');
     window.electronAPI.stopBatteryMonitoring();
     return;
   }
 
+  console.log('[DEBUG] updateDevicesSelect: 填充设备选择器...');
   devicesSelect.innerHTML = '';
   devices.forEach(device => {
     const option = document.createElement('option');
     option.value = device;
     option.textContent = device;
     devicesSelect.appendChild(option);
+    console.log('[DEBUG] updateDevicesSelect: 添加设备选项:', device);
 
     if (!prevDevices.includes(device)) {
+      console.log('[DEBUG] updateDevicesSelect: 新设备，初始化计时器状态:', device);
       deviceTimerStates[device] = {
         timestamps: 0,
         state: 'reset'
@@ -183,39 +190,45 @@ function updateDevicesSelect(devices) {
   if (!currentDevice || !devices.includes(currentDevice)) {
     currentDevice = devices[0];
     devicesSelect.value = currentDevice;
+    console.log('[DEBUG] updateDevicesSelect: 设置当前设备为:', currentDevice);
     loadDeviceState(currentDevice); // 加载默认设备状态
     // 启动电池监控
+    console.log('[DEBUG] updateDevicesSelect: 启动电池监控...');
     window.electronAPI.startBatteryMonitoring(currentDevice);
   }
+  console.log('[DEBUG] updateDevicesSelect: 设备列表更新完成');
 }
 
 // 监听主进程消息
 window.electronAPI.onAdbInitialized((isReady) => {
+  console.log('[DEBUG] onAdbInitialized: ADB初始化状态:', isReady);
   if (isReady) {
-    console.log('ADB已初始化');
+    console.log('[DEBUG] onAdbInitialized: ADB已初始化');
   }
 });
 
-window.electronAPI.onWifiDevicesUpdate((devices) => {
-  console.log('WiFi设备更新:', devices);
+window.electronAPI.onUsbDevicesUpdate((devices) => {
+  console.log('[DEBUG] onUsbDevicesUpdate: 收到USB设备更新:', devices);
   updateDevicesSelect(devices);
 });
 
 window.electronAPI.onHint((message) => {
-  console.log('提示消息:', message);
+  console.log('[DEBUG] onHint: 收到提示消息:', message);
   const statusInfo = document.querySelector('.status-info');
   if (statusInfo) {
     statusInfo.textContent = `状态提示：${message}`;
+    console.log('[DEBUG] onHint: 状态栏已更新');
     // 5秒后恢复默认提示
     setTimeout(() => {
       statusInfo.textContent = '状态提示：准备就绪';
+      console.log('[DEBUG] onHint: 状态栏恢复默认');
     }, 5000);
   }
 });
 
 // 监听电池信息更新
 window.electronAPI.onBatteryInfoUpdate((batteryInfo) => {
-  console.log('电池信息更新:', batteryInfo);
+  console.log('[DEBUG] onBatteryInfoUpdate: 收到电池信息更新:', batteryInfo);
   updateBatteryDisplay(batteryInfo);
 });
 
@@ -233,16 +246,22 @@ function updateBatteryDisplay(batteryInfo) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('[DEBUG] DOMContentLoaded: DOM加载完成，开始初始化...');
   // 初始化DOM元素引用
   timerBtn = document.getElementById('timer-btn');
-  devicesSelect = document.getElementById('wifi-devices');
+  devicesSelect = document.getElementById('usb-devices');
+  console.log('[DEBUG] DOMContentLoaded: DOM元素已获取');
   
+  console.log('[DEBUG] DOMContentLoaded: 初始化计时器...');
   initTimer();
+  console.log('[DEBUG] DOMContentLoaded: 初始化scrcpy...');
   initScrcpy();
+  console.log('[DEBUG] DOMContentLoaded: 初始化完成');
 });
 
 // 初始化 scrcpy 按钮
 function initScrcpy() {
+  console.log('[DEBUG] initScrcpy: 初始化scrcpy按钮...');
   const scrcpyBtn = document.getElementById('scrcpy-btn');
   const stopScrcpyBtn = document.getElementById('stop-scrcpy-btn');
   const quitAppBtn = document.getElementById('quit-app-btn');
@@ -250,37 +269,50 @@ function initScrcpy() {
   
   if (scrcpyBtn) {
     scrcpyBtn.addEventListener('click', () => {
+      console.log('[DEBUG] scrcpy-btn: 点击启动scrcpy按钮');
       if (!currentDevice) {
-        console.log('请先选择设备');
+        console.log('[DEBUG] scrcpy-btn: 没有选择设备');
         return;
       }
+      console.log('[DEBUG] scrcpy-btn: 启动scrcpy监控, 设备:', currentDevice);
       // 启动 scrcpy 监控
       window.electronAPI.startScrcpy(currentDevice);
     });
+    console.log('[DEBUG] initScrcpy: scrcpy按钮事件已绑定');
   }
   
   if (stopScrcpyBtn) {
     stopScrcpyBtn.addEventListener('click', () => {
+      console.log('[DEBUG] stop-scrcpy-btn: 点击停止scrcpy按钮');
       // 停止所有 scrcpy
       window.electronAPI.stopScrcpy();
     });
+    console.log('[DEBUG] initScrcpy: stop-scrcpy按钮事件已绑定');
   }
   
   if (quitAppBtn) {
     quitAppBtn.addEventListener('click', () => {
+      console.log('[DEBUG] quit-app-btn: 点击强制停止应用按钮');
       if (!currentDevice) {
-        console.log('请先选择设备');
+        console.log('[DEBUG] quit-app-btn: 没有选择设备');
         return;
       }
+      console.log('[DEBUG] quit-app-btn: 强制停止当前应用, 设备:', currentDevice);
       // 强制停止当前应用
       window.electronAPI.quitCurrentApp(currentDevice);
     });
+    console.log('[DEBUG] initScrcpy: quit-app按钮事件已绑定');
   }
   
   if (shutdownBtn) {
     shutdownBtn.addEventListener('click', () => {
+      console.log('[DEBUG] shutdown-btn: 点击关机按钮');
+      console.log('[DEBUG] shutdown-btn: 开始关闭流程...');
       // 关闭所有设备并退出应用
       window.electronAPI.shutdown();
     });
+    console.log('[DEBUG] initScrcpy: shutdown按钮事件已绑定');
   }
+  
+  console.log('[DEBUG] initScrcpy: 所有按钮初始化完成');
 }

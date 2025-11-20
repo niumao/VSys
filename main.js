@@ -21,9 +21,8 @@ if (!app.isPackaged) {
   }
 }
 
-let wifiDevices = [];
+let usbDevices = [];
 let mainWindow;
-let processingDevices = new Set(); // 正在处理的设备集合
 let scrcpyProcesses = {}; // 存储 scrcpy 进程 { displayId: process }
 let displayCheckInterval = null; // display 状态检查定时器
 let currentDevice = null; // 当前选中的设备
@@ -58,9 +57,11 @@ function execAdbCommand(command, options = {}, delayMs = 100, delayBefore = fals
   });
 }
 
-ipcMain.on('get-wifi-devices', () => {
-  console.log('收到设备列表请求，当前设备:', wifiDevices);
-  mainWindow?.webContents.send('update-wifi-devices', wifiDevices);
+ipcMain.on('get-usb-devices', () => {
+  console.log('[DEBUG] IPC: 收到 get-usb-devices 请求');
+  console.log('[DEBUG] IPC: 当前USB设备:', usbDevices);
+  mainWindow?.webContents.send('update-usb-devices', usbDevices);
+  console.log('[DEBUG] IPC: 已发送设备列表到渲染进程');
 });
 
 // 检查环境依赖
@@ -176,146 +177,135 @@ async function handleEnvironmentCheck() {
 }
 
 async function initAdb() {
+  console.log('[DEBUG] 开始初始化ADB...');
   try {
+    console.log('[DEBUG] 正在启动ADB服务器...');
     await execAdbCommand('adb start-server', { stdio: 'pipe' }, 3000);
-    console.log('ADB服务启动成功');
+    console.log('[DEBUG] ADB服务启动成功');
   } catch (error) {
-    console.error('ADB初始化失败:', error.message);
+    console.error('[ERROR] ADB初始化失败:', error.message);
     return false;
   }
   
-  refreshWifiDevices().then(() => {
-    console.log('ADB初始化成功,当前设备:', wifiDevices);
+  console.log('[DEBUG] 开始刷新USB设备列表...');
+  refreshUsbDevices().then(() => {
+    console.log('[DEBUG] ADB初始化成功,当前设备:', usbDevices);
   }).catch((error) => {
-    console.error('获取设备列表失败:', error.message);
+    console.error('[ERROR] 获取设备列表失败:', error.message);
   });
 }
 
-async function refreshWifiDevices() {
+async function refreshUsbDevices() {
+  console.log('[DEBUG] refreshUsbDevices: 开始获取设备列表...');
   try {
     const result = await execAdbCommand('adb devices', { encoding: 'utf8' });
+    console.log('[DEBUG] refreshUsbDevices: adb devices 原始输出:', result.trim());
     
     const newDevices = [];
     const lines = result.split('\n').slice(1);
+    console.log('[DEBUG] refreshUsbDevices: 处理', lines.length, '行输出');
+    
     lines.forEach(line => {
       const match = line.match(/^(\S+)\s+device/);
       if (match) {
         const deviceId = match[1];
-        if (deviceId.includes(':')) {
+        console.log('[DEBUG] refreshUsbDevices: 发现设备:', deviceId);
+        // 只添加USB设备（不包含冒号的）
+        if (!deviceId.includes(':')) {
+          console.log('[DEBUG] refreshUsbDevices: 添加USB设备:', deviceId);
           newDevices.push(deviceId);
+        } else {
+          console.log('[DEBUG] refreshUsbDevices: 跳过WiFi设备:', deviceId);
         }
       }
     });
 
-    wifiDevices = newDevices;
-    mainWindow?.webContents.send('update-wifi-devices', wifiDevices);
+    console.log('[DEBUG] refreshUsbDevices: 找到', newDevices.length, '个USB设备:', newDevices);
+    usbDevices = newDevices;
+    console.log('[DEBUG] refreshUsbDevices: 发送设备列表更新到渲染进程');
+    mainWindow?.webContents.send('update-usb-devices', usbDevices);
   } catch (error) {
-    console.error('获取设备列表失败:', error.message);
+    console.error('[ERROR] refreshUsbDevices: 获取设备列表失败:', error.message);
   }
 }
 
-async function connectDeviceViaWifi(usbDeviceId) {
+async function setupUsbDevice(usbDeviceId) {
+  console.log('[DEBUG] setupUsbDevice: 开始设置设备:', usbDeviceId);
   try {
-    await execAdbCommand(`adb -s ${usbDeviceId} tcpip 5555`, { encoding: 'utf8' }, 3000, true);
-    
-    const ipResult = await execAdbCommand(`adb -s ${usbDeviceId} shell ip route get 1`, { encoding: 'utf8' }, 3000, true);
-    const ipMatch = ipResult.match(/src\s+(\d+\.\d+\.\d+\.\d+)/);
-    if (!ipMatch) {
-      mainWindow?.webContents.send('show-hint', `设备${usbDeviceId}获取IP失败`);
-      return;
-    }
-    const deviceIp = ipMatch[1];
-    
-    await execAdbCommand(`adb connect ${deviceIp}:5555`, { stdio: 'pipe' }, 1800);
-    mainWindow?.webContents.send('show-hint', `已通过WiFi连接设备: ${deviceIp}:5555`);
-    
     // 清理不需要的后台进程
-    const wifiDeviceId = `${deviceIp}:5555`;
+    console.log('[DEBUG] setupUsbDevice: 停止后台进程...');
     try {
-      await execAdbCommand(`adb -s ${wifiDeviceId} shell am force-stop com.picovr.updatesystem`, { stdio: 'pipe' });
-      console.log('已停止 com.picovr.updatesystem');
+      console.log('[DEBUG] setupUsbDevice: 停止 com.picovr.updatesystem...');
+      await execAdbCommand(`adb -s ${usbDeviceId} shell am force-stop com.picovr.updatesystem`, { stdio: 'pipe' });
+      console.log('[DEBUG] setupUsbDevice: 已停止 com.picovr.updatesystem');
     } catch (error) {
-      console.error('停止 updatesystem 失败:', error.message);
+      console.error('[ERROR] setupUsbDevice: 停止 updatesystem 失败:', error.message);
     }
     
     try {
-      await execAdbCommand(`adb -s ${wifiDeviceId} shell am force-stop com.pvr.home`, { stdio: 'pipe' });
-      console.log('已停止 com.pvr.home');
+      console.log('[DEBUG] setupUsbDevice: 停止 com.pvr.home...');
+      await execAdbCommand(`adb -s ${usbDeviceId} shell am force-stop com.pvr.home`, { stdio: 'pipe' });
+      console.log('[DEBUG] setupUsbDevice: 已停止 com.pvr.home');
     } catch (error) {
-      console.error('停止 pvr.home 失败:', error.message);
+      console.error('[ERROR] setupUsbDevice: 停止 pvr.home 失败:', error.message);
     }
     
-    setTimeout(refreshWifiDevices, 1000);
+    console.log('[DEBUG] setupUsbDevice: 1秒后刷新设备列表...');
+    setTimeout(refreshUsbDevices, 1000);
+    console.log('[DEBUG] setupUsbDevice: 设备设置完成');
   } catch (error) {
-    console.error('WiFi连接失败:', error.message);
-    mainWindow?.webContents.send('show-hint', `WiFi连接失败: ${error.message}`);
+    console.error('[ERROR] setupUsbDevice: 设备设置失败:', error.message);
+    mainWindow?.webContents.send('show-hint', `设备设置失败: ${error.message}`);
   }
 }
 
 function monitorUsbDevices() {
+  console.log('[DEBUG] monitorUsbDevices: 开始监控USB设备...');
   const monitor = udev.monitor('usb');
   
   monitor.on('add', async (device) => {
+    console.log('[DEBUG] monitorUsbDevices: 检测到USB事件');
+    console.log('[DEBUG] monitorUsbDevices: 设备信息 - ID_BUS:', device.ID_BUS, 'ID_VENDOR_ID:', device.ID_VENDOR_ID, 'ID_MODEL:', device.ID_MODEL);
+    
     if (device.ID_BUS === 'usb' && 
         (device.ID_VENDOR_ID === '2d40' ||  // Google厂商ID示例
          device.ID_MODEL?.includes('Android'))) {
 
-        console.log('检测到USB设备插入事件');
-        
-        // 先快速检查是否有设备正在处理（避免浪费3秒延迟）
-        try {
-          // 立即获取设备列表（不延迟）
-          const quickCheck = await execAdbCommand('adb devices', { encoding: 'utf8' }, 0);
-          const quickDeviceId = quickCheck.match(/^(\S+)\s+device/m)?.[1];
-          
-          if (quickDeviceId && !quickDeviceId.includes(':') && processingDevices.has(quickDeviceId)) {
-            console.log('设备已在处理队列中，忽略此次事件:', quickDeviceId);
-            return;
-          }
-        } catch (error) {
-          // 快速检查失败，继续正常流程
-        }
+        console.log('[DEBUG] monitorUsbDevices: 检测到Android USB设备插入事件');
         
         try {
-          // 延迟3秒后再次获取设备列表（确保设备完全识别）
+          console.log('[DEBUG] monitorUsbDevices: 等待3秒让设备完全识别...');
+          // 延迟3秒后获取设备列表（确保设备完全识别）
           const devicesResult = await execAdbCommand('adb devices', { encoding: 'utf8' }, 3000, true);
+          console.log('[DEBUG] monitorUsbDevices: adb devices 输出:', devicesResult.trim());
+          
           const usbDeviceId = devicesResult.match(/^(\S+)\s+device/m)?.[1];
           
-          console.log('USB设备ID:', usbDeviceId);
+          console.log('[DEBUG] monitorUsbDevices: 提取的USB设备ID:', usbDeviceId);
           if (usbDeviceId && !usbDeviceId.includes(':')) {
-            // 再次检查是否正在处理该设备
-            if (processingDevices.has(usbDeviceId)) {
-              console.log('设备正在处理中，跳过:', usbDeviceId);
-              return;
-            }
-            
-            // 标记为正在处理
-            processingDevices.add(usbDeviceId);
-            console.log('开始处理设备:', usbDeviceId);
-            
-            try {
-              mainWindow?.webContents.send('show-hint', `检测到新设备: ${usbDeviceId}`);
-              await connectDeviceViaWifi(usbDeviceId);
-            } finally {
-              // 处理完成后，延迟移除标记（防止短时间内重复触发）
-              setTimeout(() => {
-                processingDevices.delete(usbDeviceId);
-                console.log('设备处理完成，可重新处理:', usbDeviceId);
-              }, 10000); // 10秒后允许重新处理
-            }
+            console.log('[DEBUG] monitorUsbDevices: 确认为USB设备，开始设置...');
+            mainWindow?.webContents.send('show-hint', `检测到新设备: ${usbDeviceId}`);
+            await setupUsbDevice(usbDeviceId);
+          } else {
+            console.log('[DEBUG] monitorUsbDevices: 设备ID无效或为WiFi设备，跳过');
           }
         } catch (error) {
-          console.error('获取USB设备失败:', error.message);
+          console.error('[ERROR] monitorUsbDevices: 获取USB设备失败:', error.message);
         }
+    } else {
+      console.log('[DEBUG] monitorUsbDevices: 非Android USB设备，跳过');
     }
   });
 
   monitor.on('error', (err) => {
-    console.error('udev监听错误:', err);
+    console.error('[ERROR] monitorUsbDevices: udev监听错误:', err);
   });
+  
+  console.log('[DEBUG] monitorUsbDevices: USB设备监控已启动');
 }
 
 async function createWindow() {
+  console.log('[DEBUG] createWindow: 创建主窗口...');
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -323,15 +313,23 @@ async function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), }
   });
 
+  console.log('[DEBUG] createWindow: 加载 index.html...');
   mainWindow.loadFile('index.html');
   //mainWindow.webContents.openDevTools();
 
   // 检查环境依赖
+  console.log('[DEBUG] createWindow: 检查环境依赖...');
   const envOk = await handleEnvironmentCheck();
-  if (!envOk) return;
+  if (!envOk) {
+    console.log('[DEBUG] createWindow: 环境检查失败，跳过初始化');
+    return;
+  }
   
+  console.log('[DEBUG] createWindow: 初始化ADB...');
   initAdb();
+  console.log('[DEBUG] createWindow: 启动USB设备监控...');
   monitorUsbDevices();
+  console.log('[DEBUG] createWindow: 窗口创建完成');
 }
 
 app.whenReady().then(createWindow);
@@ -469,19 +467,24 @@ function stopAllScrcpy() {
 
 // 启动 scrcpy 监控
 async function startScrcpyMonitoring(deviceId) {
+  console.log('[DEBUG] startScrcpyMonitoring: 开始监控设备:', deviceId);
   currentDevice = deviceId;
   
   // 先停止之前的监控
+  console.log('[DEBUG] startScrcpyMonitoring: 停止之前的scrcpy进程...');
   stopAllScrcpy();
   
   // 立即检查一次
+  console.log('[DEBUG] startScrcpyMonitoring: 立即检查display状态...');
   await updateDisplays();
   
   // 每1秒检查一次 display 状态
+  console.log('[DEBUG] startScrcpyMonitoring: 启动display状态定时检查(1秒间隔)...');
   displayCheckInterval = setInterval(async () => {
     await updateDisplays();
   }, 1000);
   
+  console.log('[DEBUG] startScrcpyMonitoring: scrcpy监控已启动');
   mainWindow?.webContents.send('show-hint', `已开始监控设备 ${deviceId}`);
 }
 
@@ -569,7 +572,9 @@ async function updateDisplays() {
 
 // IPC 监听器
 ipcMain.on('start-scrcpy', (event, deviceId) => {
+  console.log('[DEBUG] IPC: 收到 start-scrcpy 请求, 设备:', deviceId);
   if (!deviceId) {
+    console.log('[DEBUG] IPC: 没有选择设备');
     mainWindow?.webContents.send('show-hint', '请先选择设备');
     return;
   }
@@ -577,88 +582,92 @@ ipcMain.on('start-scrcpy', (event, deviceId) => {
 });
 
 ipcMain.on('stop-scrcpy', () => {
+  console.log('[DEBUG] IPC: 收到 stop-scrcpy 请求');
   stopAllScrcpy();
   mainWindow?.webContents.send('show-hint', '已停止所有 scrcpy');
+  console.log('[DEBUG] IPC: 所有 scrcpy 已停止');
 });
 
 // 关闭应用和电脑
 ipcMain.on('shutdown-app', async () => {
+  console.log('[DEBUG] shutdown-app: 开始关闭流程...');
   try {
     mainWindow?.webContents.send('show-hint', '正在关闭所有设备...');
     
     // 1. 停止所有 scrcpy 进程
+    console.log('[DEBUG] shutdown-app: 步骤1 - 停止所有scrcpy进程...');
     stopAllScrcpy();
     
     // 2. 停止电池监控
+    console.log('[DEBUG] shutdown-app: 步骤2 - 停止电池监控...');
     stopBatteryMonitoring();
     
     // 3. 关闭所有设备（使用 reboot -p 命令）
-    if (wifiDevices.length > 0) {
-      for (const device of wifiDevices) {
+    console.log('[DEBUG] shutdown-app: 步骤3 - 关闭所有USB设备...');
+    console.log('[DEBUG] shutdown-app: 当前USB设备数量:', usbDevices.length);
+    if (usbDevices.length > 0) {
+      for (const device of usbDevices) {
         try {
+          console.log('[DEBUG] shutdown-app: 关闭设备:', device);
           // 先关闭设备电源
           await execAdbCommand(`adb -s ${device} shell reboot -p`, { stdio: 'pipe' });
-          console.log(`已关闭设备: ${device}`);
+          console.log('[DEBUG] shutdown-app: 设备已关闭:', device);
         } catch (error) {
-          console.error(`关闭设备失败 ${device}:`, error.message);
+          console.error('[ERROR] shutdown-app: 关闭设备失败', device, ':', error.message);
         }
       }
       
       // 等待设备完全关闭
+      console.log('[DEBUG] shutdown-app: 等待设备完全关闭(3秒)...');
       mainWindow?.webContents.send('show-hint', '等待设备关闭...');
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
     
-    // 4. 断开所有 WiFi 设备连接
-    if (wifiDevices.length > 0) {
-      for (const device of wifiDevices) {
-        try {
-          await execAdbCommand(`adb disconnect ${device}`, { stdio: 'pipe' });
-          console.log(`已断开设备: ${device}`);
-        } catch (error) {
-          console.error(`断开设备失败 ${device}:`, error.message);
-        }
-      }
-    }
-    
-    // 5. 停止 adb server
+    // 4. 停止 adb server
+    console.log('[DEBUG] shutdown-app: 步骤4 - 停止ADB服务器...');
     try {
       await execAdbCommand('adb kill-server', { stdio: 'pipe' });
-      console.log('ADB server 已关闭');
+      console.log('[DEBUG] shutdown-app: ADB server 已关闭');
     } catch (error) {
-      console.error('关闭 ADB server 失败:', error.message);
+      console.error('[ERROR] shutdown-app: 关闭 ADB server 失败:', error.message);
     }
     
-    // 6. 关闭电脑
+    // 5. 关闭电脑
+    console.log('[DEBUG] shutdown-app: 步骤5 - 关闭电脑...');
     mainWindow?.webContents.send('show-hint', '正在关闭电脑...');
-    console.log('正在关闭电脑...');
     
-    // 延迟1秒后关闭电脑
+    // 延迟3秒后关闭电脑
     setTimeout(() => {
+      console.log('[DEBUG] shutdown-app: 执行关机命令...');
       try {
         // Linux 系统关机命令
         execSync('shutdown now', { stdio: 'pipe' });
+        console.log('[DEBUG] shutdown-app: shutdown now 命令已执行');
       } catch (error) {
-        console.error('关闭电脑失败:', error.message);
+        console.error('[ERROR] shutdown-app: 关闭电脑失败:', error.message);
         // 如果 shutdown 失败，尝试使用 poweroff
         try {
+          console.log('[DEBUG] shutdown-app: 尝试使用 poweroff...');
           execSync('poweroff', { stdio: 'pipe' });
+          console.log('[DEBUG] shutdown-app: poweroff 命令已执行');
         } catch (e) {
-          console.error('poweroff 也失败:', e.message);
+          console.error('[ERROR] shutdown-app: poweroff 也失败:', e.message);
         }
       }
       
       // 退出应用
+      console.log('[DEBUG] shutdown-app: 退出应用...');
       app.quit();
     }, 3000);
     
   } catch (error) {
-    console.error('关闭应用失败:', error.message);
+    console.error('[ERROR] shutdown-app: 关闭应用失败:', error.message);
     // 即使失败也尝试关闭电脑
     try {
+      console.log('[DEBUG] shutdown-app: 发生错误，尝试直接关机...');
       execSync('shutdown now', { stdio: 'pipe' });
     } catch (e) {
-      console.error('关闭电脑失败:', e.message);
+      console.error('[ERROR] shutdown-app: 最终关机尝试失败:', e.message);
     }
     app.quit();
   }
@@ -728,16 +737,20 @@ async function getBatteryInfo(deviceId) {
 
 // 启动电池信息监控
 function startBatteryMonitoring(deviceId) {
+  console.log('[DEBUG] startBatteryMonitoring: 开始监控设备电池:', deviceId);
   // 先停止之前的监控
   stopBatteryMonitoring();
   
   // 立即获取一次
+  console.log('[DEBUG] startBatteryMonitoring: 立即获取电池信息...');
   updateBatteryInfo(deviceId);
   
   // 每5秒更新一次电池信息
+  console.log('[DEBUG] startBatteryMonitoring: 启动电池信息定时检查(5秒间隔)...');
   batteryCheckInterval = setInterval(() => {
     updateBatteryInfo(deviceId);
   }, 5000);
+  console.log('[DEBUG] startBatteryMonitoring: 电池监控已启动');
 }
 
 // 更新电池信息
@@ -766,54 +779,65 @@ function stopBatteryMonitoring() {
 
 // IPC 监听器 - 启动电池监控
 ipcMain.on('start-battery-monitoring', (event, deviceId) => {
-  if (!deviceId) return;
+  console.log('[DEBUG] IPC: 收到 start-battery-monitoring 请求, 设备:', deviceId);
+  if (!deviceId) {
+    console.log('[DEBUG] IPC: 没有设备ID，跳过');
+    return;
+  }
   startBatteryMonitoring(deviceId);
 });
 
 // IPC 监听器 - 停止电池监控
 ipcMain.on('stop-battery-monitoring', () => {
+  console.log('[DEBUG] IPC: 收到 stop-battery-monitoring 请求');
   stopBatteryMonitoring();
+  console.log('[DEBUG] IPC: 电池监控已停止');
 });
 
 // 获取当前焦点应用并强制停止
 async function quitCurrentApp(deviceId) {
+  console.log('[DEBUG] quitCurrentApp: 开始强制停止当前应用, 设备:', deviceId);
   try {
     // 获取当前焦点窗口
+    console.log('[DEBUG] quitCurrentApp: 获取当前焦点窗口...');
     const result = await execAdbCommand(
       `adb -s ${deviceId} shell dumpsys window | grep mCurrentFocus`,
       { encoding: 'utf8' }
     );
     
-    console.log('当前焦点窗口:', result.trim());
+    console.log('[DEBUG] quitCurrentApp: 当前焦点窗口:', result.trim());
     
     // 解析包名，格式: mCurrentFocus=Window{... u0 com.example.app/com.example.app.MainActivity}
     const match = result.match(/u\d+\s+([^\s\/]+)/);
     
     if (match && match[1]) {
       const packageName = match[1];
-      console.log('提取到的包名:', packageName);
+      console.log('[DEBUG] quitCurrentApp: 提取到的包名:', packageName);
       
       // 强制停止应用
+      console.log('[DEBUG] quitCurrentApp: 执行 force-stop 命令...');
       await execAdbCommand(
         `adb -s ${deviceId} shell am force-stop ${packageName}`,
         { encoding: 'utf8' }
       );
       
+      console.log('[DEBUG] quitCurrentApp: 已强制停止应用:', packageName);
       mainWindow?.webContents.send('show-hint', `已强制停止: ${packageName}`);
-      console.log(`已强制停止应用: ${packageName}`);
     } else {
+      console.log('[DEBUG] quitCurrentApp: 无法解析包名，原始输出:', result);
       mainWindow?.webContents.send('show-hint', '未找到当前运行的应用');
-      console.log('无法解析包名，原始输出:', result);
     }
   } catch (error) {
-    console.error('强制停止应用失败:', error.message);
+    console.error('[ERROR] quitCurrentApp: 强制停止应用失败:', error.message);
     mainWindow?.webContents.send('show-hint', `停止应用失败: ${error.message}`);
   }
 }
 
 // IPC 监听器 - 强制停止当前应用
 ipcMain.on('quit-current-app', (event, deviceId) => {
+  console.log('[DEBUG] IPC: 收到 quit-current-app 请求, 设备:', deviceId);
   if (!deviceId) {
+    console.log('[DEBUG] IPC: 没有选择设备');
     mainWindow?.webContents.send('show-hint', '请先选择设备');
     return;
   }
