@@ -78,7 +78,9 @@ async function checkEnvironment() {
   
   // 检查 adb
   try {
+    console.log('[CHECK] which adb');
     execSync('which adb', { stdio: 'pipe' });
+    console.log('[CHECK] adb --version');
     const version = execSync('adb --version', { encoding: 'utf8' });
     status.adb.available = true;
     status.adb.message = `ADB 可用: ${version.split('\n')[0]}`;
@@ -90,7 +92,9 @@ async function checkEnvironment() {
   
   // 检查 scrcpy
   try {
+    console.log('[CHECK] which scrcpy');
     execSync('which scrcpy', { stdio: 'pipe' });
+    console.log('[CHECK] scrcpy --version');
     const version = execSync('scrcpy --version', { encoding: 'utf8' });
     status.scrcpy.available = true;
     status.scrcpy.message = `scrcpy 可用: ${version.split('\n')[0]}`;
@@ -421,7 +425,8 @@ function startScrcpy(deviceId, displayId, position = 'center') {
     '-s', deviceId
   ];
   
-  console.log('启动 scrcpy:', 'scrcpy', scrcpyArgs.join(' '));
+  const scrcpyCommand = 'scrcpy ' + scrcpyArgs.join(' ');
+  console.log('[SCRCPY]', scrcpyCommand);
   
   const scrcpyProcess = spawn('scrcpy', scrcpyArgs, {
     detached: false,
@@ -447,11 +452,12 @@ function stopScrcpy(displayId) {
   const process = scrcpyProcesses[displayId];
   if (process) {
     try {
+      console.log('[SCRCPY] 停止 displayId=' + displayId);
       process.kill();
       delete scrcpyProcesses[displayId];
-      console.log(`已停止 scrcpy (displayId=${displayId})`);
+      console.log('[DEBUG] 已停止 scrcpy (displayId=' + displayId + ')');
     } catch (error) {
-      console.error(`停止 scrcpy 失败 (displayId=${displayId}):`, error.message);
+      console.error('[ERROR] 停止 scrcpy 失败 (displayId=' + displayId + '):', error.message);
     }
   }
 }
@@ -645,6 +651,7 @@ ipcMain.on('shutdown-app', async () => {
       console.log('[DEBUG] shutdown-app: 执行关机命令...');
       try {
         // Linux 系统关机命令
+        console.log('[SYSTEM] shutdown now');
         execSync('shutdown now', { stdio: 'pipe' });
         console.log('[DEBUG] shutdown-app: shutdown now 命令已执行');
       } catch (error) {
@@ -652,6 +659,7 @@ ipcMain.on('shutdown-app', async () => {
         // 如果 shutdown 失败，尝试使用 poweroff
         try {
           console.log('[DEBUG] shutdown-app: 尝试使用 poweroff...');
+          console.log('[SYSTEM] poweroff');
           execSync('poweroff', { stdio: 'pipe' });
           console.log('[DEBUG] shutdown-app: poweroff 命令已执行');
         } catch (e) {
@@ -669,6 +677,7 @@ ipcMain.on('shutdown-app', async () => {
     // 即使失败也尝试关闭电脑
     try {
       console.log('[DEBUG] shutdown-app: 发生错误，尝试直接关机...');
+      console.log('[SYSTEM] shutdown now');
       execSync('shutdown now', { stdio: 'pipe' });
     } catch (e) {
       console.error('[ERROR] shutdown-app: 最终关机尝试失败:', e.message);
