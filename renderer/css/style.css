@@ -68,21 +68,11 @@
   display: none; /* 默认隐藏 */
   justify-content: center;
   align-items: center;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.8);
   color: white;
   font-size: 2em;
   font-weight: bold;
   z-index: 1000;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 0.7;
-  }
-  50% {
-    opacity: 1;
-  }
 }
 
 /* 底部栏样式 */

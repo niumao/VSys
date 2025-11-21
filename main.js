@@ -251,6 +251,14 @@ async function connectDeviceViaWifi(usbDeviceId) {
       console.error('停止 pvr.home 失败:', error.message);
     }
     
+    // 设置 persist.pvr.wifi.auto_connect 为 1（启用自动 WiFi 连接）
+    try {
+      await execAdbCommand(`adb -s ${wifiDeviceId} shell setprop persist.pvr.wifi.auto_connect 1`, { stdio: 'pipe' });
+      console.log('已设置 persist.pvr.wifi.auto_connect = 1');
+    } catch (error) {
+      console.error('设置 persist.pvr.wifi.auto_connect 失败:', error.message);
+    }
+    
     setTimeout(refreshWifiDevices, 1000);
   } catch (error) {
     console.error('WiFi连接失败:', error.message);
@@ -646,7 +654,7 @@ ipcMain.on('start-scrcpy', async (event, deviceId) => {
   
   // 设置 persist.pvr.sleep_by_static 为 0
   try {
-    await execAdbCommand(`adb -s ${deviceId} shell setprop persist.pvr.sleep_by_static 0`, { stdio: 'pipe' });
+    await execAdbCommand(`adb -s ${deviceId} shell setprop pvr.factorytest.never.sleep 0`, { stdio: 'pipe' });
     console.log('已设置 persist.pvr.sleep_by_static = 0');
   } catch (error) {
     console.error('设置 persist.pvr.sleep_by_static 失败:', error.message);
@@ -659,7 +667,7 @@ ipcMain.on('stop-scrcpy', async () => {
   // 设置 persist.pvr.sleep_by_static 为 1
   if (currentDevice) {
     try {
-      await execAdbCommand(`adb -s ${currentDevice} shell setprop persist.pvr.sleep_by_static 1`, { stdio: 'pipe' });
+      await execAdbCommand(`adb -s ${currentDevice} shell setprop pvr.factorytest.never.sleep 1`, { stdio: 'pipe' });
       console.log('已设置 persist.pvr.sleep_by_static = 1');
     } catch (error) {
       console.error('设置 persist.pvr.sleep_by_static 失败:', error.message);
@@ -869,9 +877,9 @@ ipcMain.on('stop-battery-monitoring', () => {
 // 获取当前焦点应用并强制停止
 async function quitCurrentApp(deviceId) {
   try {
-    // 获取当前焦点窗口
+    // 获取当前焦点窗口（只获取有实际窗口的行，忽略 null）
     const result = await execAdbCommand(
-      `adb -s ${deviceId} shell dumpsys window | grep mCurrentFocus`,
+      `adb -s ${deviceId} shell dumpsys window | grep mCurrentFocus=Window`,
       { encoding: 'utf8' }
     );
     
