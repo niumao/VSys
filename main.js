@@ -521,29 +521,47 @@ function stopScrcpy(displayId) {
 
 // 停止所有 scrcpy 进程
 function stopAllScrcpy(sendStateUpdate = true) {
+  console.log(`[stopAllScrcpy] 开始停止，进程数: ${Object.keys(scrcpyProcesses).length}, 定时器存在: ${!!displayCheckInterval}`);
+  
+  // 1️⃣ 先停止并清除定时器（最重要！）
+  if (displayCheckInterval) {
+    console.log(`[stopAllScrcpy] 清除定时器，ID: ${displayCheckInterval}`);
+    clearInterval(displayCheckInterval);
+    displayCheckInterval = null; // 立即设置为 null，防止回调执行
+  } else {
+    console.log(`[stopAllScrcpy] 没有定时器需要清除`);
+  }
+  
+  // 2️⃣ 然后停止所有 scrcpy 进程
   Object.keys(scrcpyProcesses).forEach(displayId => {
     stopScrcpy(displayId);
   });
   
-  // 停止检查定时器
-  if (displayCheckInterval) {
-    clearInterval(displayCheckInterval);
-    displayCheckInterval = null;
-  }
-  
-  // 发送 scrcpy 状态更新到前端（如果需要）
+  // 3️⃣ 发送 scrcpy 状态更新到前端（如果需要）
   if (sendStateUpdate && currentDevice) {
+    console.log(`[stopAllScrcpy] 发送状态更新到前端: ${currentDevice} -> stopped`);
     mainWindow?.webContents.send('scrcpy-state-changed', { deviceId: currentDevice, state: 'stopped' });
   }
+  
+  console.log(`[stopAllScrcpy] 完成`);
 }
 
 // 启动 scrcpy 监控
 async function startScrcpyMonitoring(deviceId) {
-  // 更新当前设备
-  currentDevice = deviceId;
+  console.log(`[startScrcpyMonitoring] 开始为设备 ${deviceId} 启动监控`);
   
   // 先停止之前的监控（不发送状态更新，因为我们马上要启动新的）
   stopAllScrcpy(false);
+  
+  // 确保定时器已被清除
+  if (displayCheckInterval) {
+    console.warn('[startScrcpyMonitoring] 警告：定时器未被清除，强制清除');
+    clearInterval(displayCheckInterval);
+    displayCheckInterval = null;
+  }
+  
+  // 更新当前设备
+  currentDevice = deviceId;
   
   // 立即检查一次
   await updateDisplays();
@@ -553,6 +571,8 @@ async function startScrcpyMonitoring(deviceId) {
     await updateDisplays();
   }, 1000);
   
+  console.log(`[startScrcpyMonitoring] 定时器已创建，ID: ${displayCheckInterval}`);
+  
   mainWindow?.webContents.send('show-hint', `已开始监控设备 ${deviceId}`);
   
   // 发送 scrcpy 状态更新到前端
@@ -561,7 +581,16 @@ async function startScrcpyMonitoring(deviceId) {
 
 // 更新 display 显示状态
 async function updateDisplays() {
-  if (!currentDevice) return;
+  if (!currentDevice) {
+    console.log('[updateDisplays] 跳过：没有当前设备');
+    return;
+  }
+  
+  // 检查定时器是否仍然存在（防止在清除后还有回调执行）
+  if (!displayCheckInterval) {
+    console.log('[updateDisplays] 跳过：定时器已被清除');
+    return;
+  }
   
   const displays = await checkDisplayContent(currentDevice);
   

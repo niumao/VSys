@@ -8,24 +8,31 @@ let devicesSelect;
 let scrcpyBtn;
 
 function initTimer() {
-  devicesSelect.addEventListener('change', (e) => {
+  devicesSelect.addEventListener('change', async (e) => {
     const newDevice = e.target.value;
     if (newDevice === currentDevice || !newDevice) return;
 
     if (currentDevice) {
-      // 保存旧设备的状态
+      // 1. 先保存旧设备的状态（在停止之前）
       saveCurrentDeviceState();
       saveCurrentDeviceScrcpyState();
       
-      // 停止旧设备的 scrcpy
+      // 2. 停止旧设备的 scrcpy
       window.electronAPI.stopScrcpy();
+      
+      // 3. 等待一小段时间，确保后端完全停止（清除定时器）
+      await new Promise(resolve => setTimeout(resolve, 150));
     }
 
     currentDevice = newDevice;
     
-    // 恢复新设备的状态
+    // 4. 恢复新设备的状态
     loadDeviceState(currentDevice);
-    loadDeviceScrcpyState(currentDevice);
+    
+    // 5. 延迟一下再恢复 scrcpy 状态，确保旧设备的 scrcpy 完全停止
+    setTimeout(() => {
+      loadDeviceScrcpyState(currentDevice);
+    }, 50);
     
     // 切换设备时更新电池监控
     if (newDevice) {
@@ -311,9 +318,12 @@ window.electronAPI.onHideWaiting(() => {
 // 监听 scrcpy 状态更新
 window.electronAPI.onScrcpyStateChanged(({ deviceId, state }) => {
   console.log(`收到 scrcpy 状态更新: 设备=${deviceId}, 状态=${state}`);
-  if (deviceScrcpyStates[deviceId] !== undefined) {
-    deviceScrcpyStates[deviceId] = state;
-    if (deviceId === currentDevice) {
+  
+  // 只有当更新的是当前设备时，才同步状态
+  // 这样可以避免在切换设备时，旧设备的停止消息覆盖已保存的状态
+  if (deviceId === currentDevice) {
+    if (deviceScrcpyStates[deviceId] !== undefined) {
+      deviceScrcpyStates[deviceId] = state;
       updateScrcpyButtonState(state);
     }
   }
