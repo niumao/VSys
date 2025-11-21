@@ -3,7 +3,15 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+body {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 /* 应用容器占满整个窗口 */
@@ -23,39 +31,203 @@
 /* 左侧栏样式 */
 .sidebar {
   grid-area: sidebar;
-  background-color: #f0f0f0;
+  background: linear-gradient(180deg, #2d3748 0%, #1a202c 100%);
   padding: 20px;
-  border-right: 1px solid #ccc;
+  border-right: none;
   display: flex;
   flex-direction: column;
   gap: 15px;
+  box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2);
 }
 
 .sidebar-btn {
-  padding: 10px 15px;
+  padding: 12px 20px;
   border: none;
-  border-radius: 4px;
-  background-color: #4285f4;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   cursor: pointer;
-  transition: background-color 0.3s;
+  font-size: 0.95em;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
 }
 
 .sidebar-btn:hover {
-  background-color: #3367d6;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-btn:hover::before {
+  left: 100%;
+}
+
+.sidebar-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* 主内容区样式 */
 .main-content {
   grid-area: main;
-  padding: 20px;
-  overflow: auto; /* 内容超出时可滚动 */
-  position: relative; /* 为等待消息提供定位基准 */
+  padding: 25px;
+  overflow: hidden;
+  position: relative;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
 }
 
 .main-content h2 {
-  margin-bottom: 20px;
-  color: #333;
+  margin-bottom: 10px;
+  color: #2d3748;
+  font-size: 1.6em;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.main-content > p {
+  color: #4a5568;
+  font-size: 0.95em;
+  line-height: 1.4;
+  margin-bottom: 15px;
+}
+
+/* 操作手册样式 */
+.handbook {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.handbook h3 {
+  color: #2d3748;
+  font-size: 1.2em;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+  flex-shrink: 0;
+}
+
+.handbook-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.handbook-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.handbook-section {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.handbook-section h4 {
+  color: #2d3748;
+  font-size: 0.95em;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.handbook-section ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.handbook-section ul li {
+  color: #4a5568;
+  font-size: 0.8em;
+  line-height: 1.5;
+  padding: 3px 0;
+  padding-left: 20px;
+  position: relative;
+}
+
+.handbook-section ul li::before {
+  content: '•';
+  position: absolute;
+  left: 6px;
+  color: #667eea;
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.handbook-section ul li strong {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.handbook-tips {
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-radius: 8px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  grid-column: span 2;
+}
+
+.handbook-tips h4 {
+  color: #2d3748;
+  font-size: 0.95em;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.handbook-tips ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.handbook-tips ul li {
+  color: #4a5568;
+  font-size: 0.8em;
+  line-height: 1.5;
+  padding: 3px 0;
+  padding-left: 20px;
+  position: relative;
+}
+
+.handbook-tips ul li::before {
+  content: '✓';
+  position: absolute;
+  left: 6px;
+  color: #48bb78;
+  font-weight: bold;
 }
 
 /* 等待消息样式 */
@@ -65,129 +237,213 @@
   left: 0;
   width: 100%;
   height: 100%;
-  display: none; /* 默认隐藏 */
+  display: none;
   justify-content: center;
   align-items: center;
-  background-color: rgba(0, 0, 0, 0.8);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
+  backdrop-filter: blur(10px);
   color: white;
-  font-size: 2em;
-  font-weight: bold;
+  font-size: 2.5em;
+  font-weight: 600;
   z-index: 1000;
+  text-align: center;
+  padding: 40px;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* 底部栏样式 */
 .bottom-bar {
   grid-area: bottom;
-  background-color: #2c3e50;
+  background: linear-gradient(90deg, #1a202c 0%, #2d3748 100%);
   color: white;
-  padding: 15px 20px;
+  padding: 15px 30px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid #1a252f;
+  border-top: 2px solid rgba(102, 126, 234, 0.3);
+  box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.15);
 }
 
 .status-info {
-  font-weight: bold;
+  font-weight: 600;
+  font-size: 0.95em;
+  color: #a0aec0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-info::before {
+  content: '●';
+  color: #48bb78;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .action-hint {
-  color: #bdc3c7;
-  font-size: 0.9em;
+  color: #718096;
+  font-size: 0.85em;
 }
 
 /* 设备选择器样式 */
 .device-selector {
-  #margin-top: auto; /* 推到左侧栏底部 */
-  padding-top: 15px;
-  border-top: 1px dashed #ccc;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .device-selector label {
   display: block;
   margin-bottom: 8px;
   font-size: 0.85em;
-  color: #666;
+  color: #a0aec0;
+  font-weight: 500;
 }
 
 #wifi-devices {
   width: 100%;
-  padding: 6px;
-  font-size: 0.85em;
-  border-radius: 3px;
-  border: 1px solid #ccc;
+  padding: 10px 12px;
+  font-size: 0.9em;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+#wifi-devices:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(102, 126, 234, 0.5);
+}
+
+#wifi-devices:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+#wifi-devices option {
+  background: #2d3748;
+  color: white;
 }
 
 /* 定时器按钮样式（整合显示与状态色） */
 .device-timer {
-  padding-bottom: 15px;
-  border-bottom: 1px dashed #ccc;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .device-timer label {
   display: block;
   margin-bottom: 8px;
   font-size: 0.85em;
-  color: #666;
+  color: #a0aec0;
+  font-weight: 500;
 }
 
 /* 定时器按钮基础样式 */
 .timer-btn {
   width: 100%;
-  padding: 10px 0;
-  font-family: monospace; /* 等宽字体，时间对齐更美观 */
-  font-size: 0.9em;
-  border-radius: 3px;
+  padding: 15px 0;
+  font-family: 'Courier New', monospace;
+  font-size: 1.3em;
+  font-weight: 600;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  letter-spacing: 2px;
 }
 
-/* 状态色区分：未开始（蓝色）、运行中（红色）、已停止（绿色） */
-.timer-btn.stopped {
-  background-color: #4285f4; /* 蓝色：可开始 */
+/* 状态色区分：未开始（蓝色）、运行中（绿色）、已停止（红色） */
+.timer-btn.stopped,
+.timer-btn.reset {
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
   color: white;
 }
 
 .timer-btn.running {
-  background-color: #2ecc71; /* 红色：运行中 */
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
+  animation: timerPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+  0%, 100% { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2), 0 0 0 0 rgba(72, 187, 120, 0.4); }
+  50% { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2), 0 0 0 8px rgba(72, 187, 120, 0); }
 }
 
 .timer-btn.paused {
-  background-color: #e74c3c; /* 绿色：已暂停（可归零） */
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
   color: white;
 }
 
 .timer-btn:disabled {
-  background-color: #ccc; /* 灰色：禁用 */
-  color: #666;
+  background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+  color: #718096;
   cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.timer-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* 电池信息样式 */
 .battery-info {
-  padding: 10px 0;
-  border-bottom: 1px dashed #ccc;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .battery-item {
   display: flex;
   align-items: center;
-  padding: 5px 0;
-  font-size: 0.85em;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 0.9em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.battery-item:last-child {
+  border-bottom: none;
 }
 
 .battery-label {
-  color: #666;
+  color: #a0aec0;
   min-width: 50px;
-  margin-right: 5px;
+  margin-right: 10px;
+  font-weight: 500;
 }
 
 #battery-level,
 #battery-status,
 #battery-health,
 #battery-scale {
-  color: #333;
-  font-weight: bold;
+  color: #e2e8f0;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.battery-item:first-child #battery-level {
+  font-size: 1.2em;
 }

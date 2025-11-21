@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Electron 布局示例</title>
+  <title>VSys - 设备管理系统</title>
   <link rel="stylesheet" href="./renderer/css/style.css">
 </head>
 <body>
@@ -37,22 +37,80 @@
 	<div class="device-timer">
 	  <button id="timer-btn" class="sidebar-btn timer-btn" disabled>00:00:00</button>
         </div>
-        <button id="scrcpy-btn" class="sidebar-btn">scrcpy</button>
-        <button id="stop-scrcpy-btn" class="sidebar-btn">stop scrcpy</button>
-        <button id="quit-app-btn" class="sidebar-btn">quit app</button>
-        <button id="shutdown-btn" class="sidebar-btn">shutdown</button>
+        <button id="scrcpy-btn" class="sidebar-btn">▶ 启动投屏</button>
+        <button id="stop-scrcpy-btn" class="sidebar-btn">⏹ 停止投屏</button>
+        <button id="quit-app-btn" class="sidebar-btn">✕ 退出应用</button>
+        <button id="shutdown-btn" class="sidebar-btn">⏻ 关机</button>
     </aside>
 
     <!-- 主内容区 -->
     <main class="main-content">
-      <h2>主内容显示区域</h2>
-      <p>这里将展示具体内容...</p>
+      <h2>VR设备管理系统</h2>
+      <p>欢迎使用 VR设备管理系统。请从左侧选择设备并开始操作。</p>
+      
+      <div class="handbook">
+        <h3>📖 快速操作手册</h3>
+        
+        <div class="handbook-content">
+          <div class="handbook-column">
+            <div class="handbook-section">
+              <h4>1. 设备连接</h4>
+              <ul>
+                <li>通过 USB 连接 VR 设备到电脑</li>
+                <li>系统将自动识别设备并通过 WiFi 连接</li>
+                <li>设备列表会显示在左侧设备选择器中</li>
+              </ul>
+            </div>
+            
+            <div class="handbook-section">
+              <h4>2. 启动投屏</h4>
+              <ul>
+                <li>在左侧选择目标设备</li>
+                <li>点击「▶ 启动投屏」按钮</li>
+                <li>系统会自动显示设备屏幕画面</li>
+                <li>投屏窗口会自动定位和调整大小</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="handbook-column">
+            <div class="handbook-section">
+              <h4>3. 设备管理</h4>
+              <ul>
+                <li><strong>计时器：</strong>开始/暂停/重置设备使用时间</li>
+                <li><strong>电池监控：</strong>实时显示电量、状态和健康度</li>
+                <li><strong>退出应用：</strong>强制停止当前运行的应用</li>
+                <li><strong>停止投屏：</strong>停止所有投屏窗口</li>
+              </ul>
+            </div>
+            
+            <div class="handbook-section">
+              <h4>4. 关机操作</h4>
+              <ul>
+                <li>点击「⏻ 关机」按钮</li>
+                <li>系统将依次关闭所有 VR 设备</li>
+                <li>断开 ADB 连接并关闭电脑</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="handbook-tips">
+            <h4>💡 使用提示</h4>
+            <ul>
+              <li>每个设备的计时器状态独立保存</li>
+              <li>切换设备时，计时状态会自动保存</li>
+              <li>底部状态栏显示实时操作提示</li>
+              <li>设备会自动启用 WiFi 和防休眠模式</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </main>
 
     <!-- 底部栏 -->
     <footer class="bottom-bar">
-      <div class="status-info">状态提示：准备就绪</div>
-      <div class="action-hint">panda operate sys,提示：点击左侧按钮执行操作</div>
+      <div class="status-info">系统就绪</div>
+      <div class="action-hint">VSys - Panda Operating System v1.0</div>
     </footer>
   </div>
 

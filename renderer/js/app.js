@@ -205,10 +205,10 @@ window.electronAPI.onHint((message) => {
   console.log('提示消息:', message);
   const statusInfo = document.querySelector('.status-info');
   if (statusInfo) {
-    statusInfo.textContent = `状态提示：${message}`;
+    statusInfo.textContent = message;
     // 5秒后恢复默认提示
     setTimeout(() => {
-      statusInfo.textContent = '状态提示：准备就绪';
+      statusInfo.textContent = '系统就绪';
     }, 5000);
   }
 });
