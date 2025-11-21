@@ -66,14 +66,6 @@ html {
   transition: left 0.5s;
 }
 
-.sidebar-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
-}
-
-.sidebar-btn:hover::before {
-  left: 100%;
-}
 
 .sidebar-btn:active {
   transform: translateY(0);
@@ -322,10 +314,6 @@ html {
   cursor: pointer;
 }
 
-#wifi-devices:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(102, 126, 234, 0.5);
-}
 
 #wifi-devices:focus {
   outline: none;
@@ -399,10 +387,6 @@ html {
   opacity: 0.6;
 }
 
-.timer-btn:not(:disabled):hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
-}
 
 /* 电池信息样式 */
 .battery-info {
