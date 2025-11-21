@@ -652,9 +652,17 @@ ipcMain.on('start-scrcpy', async (event, deviceId) => {
   }
   startScrcpyMonitoring(deviceId);
   
+  // 唤醒设备
+  try {
+    await execAdbCommand(`adb -s ${deviceId} shell input keyevent KEYCODE_WAKEUP`, { stdio: 'pipe' });
+    console.log('已唤醒设备');
+  } catch (error) {
+    console.error('唤醒设备失败:', error.message);
+  }
+  
   // 设置 persist.pvr.sleep_by_static 为 0
   try {
-    await execAdbCommand(`adb -s ${deviceId} shell setprop pvr.factorytest.never.sleep 0`, { stdio: 'pipe' });
+    await execAdbCommand(`adb -s ${deviceId} shell setprop pvr.factorytest.never.sleep 1`, { stdio: 'pipe' });
     console.log('已设置 persist.pvr.sleep_by_static = 0');
   } catch (error) {
     console.error('设置 persist.pvr.sleep_by_static 失败:', error.message);
@@ -667,7 +675,7 @@ ipcMain.on('stop-scrcpy', async () => {
   // 设置 persist.pvr.sleep_by_static 为 1
   if (currentDevice) {
     try {
-      await execAdbCommand(`adb -s ${currentDevice} shell setprop pvr.factorytest.never.sleep 1`, { stdio: 'pipe' });
+      await execAdbCommand(`adb -s ${currentDevice} shell setprop pvr.factorytest.never.sleep 0`, { stdio: 'pipe' });
       console.log('已设置 persist.pvr.sleep_by_static = 1');
     } catch (error) {
       console.error('设置 persist.pvr.sleep_by_static 失败:', error.message);
