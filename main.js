@@ -358,21 +358,72 @@ async function checkDisplayContent(deviceId) {
       { encoding: 'utf8' }
     );
     
+    console.log('====== dumpsys display 原始输出 ======');
+    console.log(result);
+    console.log('====================================');
+    
     const displays = [];
+    const lines = result.split('\n');
     
-    // 使用正则表达式一次性匹配所有 display 块（只匹配 hasContent=true）
-    const displayRegex = /mDisplayId=(\d+)[\s\S]*?mHasContent=true[\s\S]*?mPrimaryDisplayDevice=(.+)/g;
-    const matches = result.matchAll(displayRegex);
+    // 按顺序循环解析，确保 mDisplayId、mHasContent、mPrimaryDisplayDevice 按顺序匹配
+    let currentDisplay = null;
     
-    for (const match of matches) {
-      displays.push({
-        displayId: match[1],
-        hasContent: true,  // 确定是 true，因为正则只匹配 true
-        deviceName: match[2].trim()
-      });
+    for (const line of lines) {
+      const displayIdMatch = line.match(/mDisplayId=(\d+)/);
+      if (displayIdMatch) {
+        // 如果之前有未完成的 display，先保存它（如果有 hasContent=true）
+        if (currentDisplay && currentDisplay.hasContent && currentDisplay.deviceName) {
+          console.log(`✓ 保存 display: id=${currentDisplay.displayId}, hasContent=${currentDisplay.hasContent}, device=${currentDisplay.deviceName}`);
+          displays.push({
+            displayId: currentDisplay.displayId,
+            hasContent: true,
+            deviceName: currentDisplay.deviceName
+          });
+        } else if (currentDisplay) {
+          console.log(`✗ 跳过 display: id=${currentDisplay.displayId}, hasContent=${currentDisplay.hasContent}, device=${currentDisplay.deviceName} (hasContent=false或无deviceName)`);
+        }
+        // 开始新的 display
+        currentDisplay = {
+          displayId: displayIdMatch[1],
+          hasContent: false,
+          deviceName: null
+        };
+        console.log(`[解析] 找到 mDisplayId=${displayIdMatch[1]}`);
+        continue;
+      }
+      
+      if (currentDisplay) {
+        const hasContentMatch = line.match(/mHasContent=(true|false)/);
+        if (hasContentMatch) {
+          currentDisplay.hasContent = hasContentMatch[1] === 'true';
+          console.log(`[解析] displayId=${currentDisplay.displayId} 的 mHasContent=${hasContentMatch[1]}`);
+          continue;
+        }
+        
+        const deviceNameMatch = line.match(/mPrimaryDisplayDevice=(.+)/);
+        if (deviceNameMatch) {
+          currentDisplay.deviceName = deviceNameMatch[1].trim();
+          console.log(`[解析] displayId=${currentDisplay.displayId} 的 mPrimaryDisplayDevice=${currentDisplay.deviceName}`);
+          continue;
+        }
+      }
     }
     
+    // 保存最后一个 display（如果有 hasContent=true）
+    if (currentDisplay && currentDisplay.hasContent && currentDisplay.deviceName) {
+      console.log(`✓ 保存最后的 display: id=${currentDisplay.displayId}, hasContent=${currentDisplay.hasContent}, device=${currentDisplay.deviceName}`);
+      displays.push({
+        displayId: currentDisplay.displayId,
+        hasContent: true,
+        deviceName: currentDisplay.deviceName
+      });
+    } else if (currentDisplay) {
+      console.log(`✗ 跳过最后的 display: id=${currentDisplay.displayId}, hasContent=${currentDisplay.hasContent}, device=${currentDisplay.deviceName} (hasContent=false或无deviceName)`);
+    }
+    
+    console.log('====== 最终解析结果 ======');
     console.log('解析到的 display 信息:', displays);
+    console.log('========================');
     return displays;
   } catch (error) {
     console.error('检查 display 状态失败:', error.message);
