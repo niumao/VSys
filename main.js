@@ -844,7 +844,7 @@ function startBatteryMonitoring(deviceId) {
   // 每5秒更新一次电池信息
   batteryCheckInterval = setInterval(() => {
     updateBatteryInfo(deviceId);
-  }, 5000);
+  }, 30000);
 }
 
 // 更新电池信息
