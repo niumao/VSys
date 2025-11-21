@@ -190,38 +190,11 @@ async function initAdb() {
     return false;
   }
   
-  // 获取设备列表并唤醒 USB 设备
-  try {
-    const result = await execAdbCommand('adb devices', { encoding: 'utf8' });
-    const lines = result.split('\n').slice(1);
-    
-    // 唤醒所有 USB 连接的设备
-    for (const line of lines) {
-      const match = line.match(/^(\S+)\s+device/);
-      if (match) {
-        const deviceId = match[1];
-        // 只处理 USB 设备（不包含冒号）
-        if (!deviceId.includes(':')) {
-          try {
-            console.log(`唤醒 USB 设备: ${deviceId}`);
-            await execAdbCommand(`adb -s ${deviceId} shell input keyevent KEYCODE_WAKEUP`, { stdio: 'pipe' });
-            console.log(`已唤醒设备: ${deviceId}`);
-          } catch (error) {
-            console.error(`唤醒设备失败 ${deviceId}:`, error.message);
-          }
-        }
-      }
-    }
-    
-    // 使用同一个结果更新 WiFi 设备列表
-    refreshWifiDevices(result).then(() => {
-      console.log('ADB初始化成功,当前设备:', wifiDevices);
-    }).catch((error) => {
-      console.error('获取设备列表失败:', error.message);
-    });
-  } catch (error) {
-    console.error('ADB初始化失败:', error.message);
-  }
+  refreshWifiDevices().then(() => {
+    console.log('ADB初始化成功,当前设备:', wifiDevices);
+  }).catch((error) => {
+    console.error('获取设备列表失败:', error.message);
+  });
 }
 
 async function refreshWifiDevices(devicesResult = null) {
@@ -337,6 +310,16 @@ function monitorUsbDevices() {
             
             try {
               mainWindow?.webContents.send('show-hint', `检测到新设备: ${usbDeviceId}`);
+              
+              // 唤醒 USB 设备
+              try {
+                console.log(`唤醒 USB 设备: ${usbDeviceId}`);
+                await execAdbCommand(`adb -s ${usbDeviceId} shell input keyevent KEYCODE_WAKEUP`, { stdio: 'pipe' });
+                console.log(`已唤醒设备: ${usbDeviceId}`);
+              } catch (error) {
+                console.error(`唤醒设备失败 ${usbDeviceId}:`, error.message);
+              }
+              
               await connectDeviceViaWifi(usbDeviceId);
             } finally {
               // 处理完成后，延迟移除标记（防止短时间内重复触发）
