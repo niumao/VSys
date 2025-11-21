@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAdbInitialized: (callback) => ipcRenderer.on('adb-initialized', (_, isReady) => callback(isReady)),
   onWifiDevicesUpdate: (callback) => ipcRenderer.on('update-wifi-devices', (_, devices) => callback(devices)),
   onBatteryInfoUpdate: (callback) => ipcRenderer.on('update-battery-info', (_, batteryInfo) => callback(batteryInfo)),
+  onShowWaiting: (callback) => ipcRenderer.on('show-waiting', (_, message) => callback(message)),
+  onHideWaiting: (callback) => ipcRenderer.on('hide-waiting', () => callback()),
   getWifiDevices: () => ipcRenderer.send('get-wifi-devices'),
   startBatteryMonitoring: (deviceId) => ipcRenderer.send('start-battery-monitoring', deviceId),
   stopBatteryMonitoring: () => ipcRenderer.send('stop-battery-monitoring'),

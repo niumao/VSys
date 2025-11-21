@@ -555,34 +555,33 @@ async function updateDisplays() {
     'NS_WINDOW_short_cut'
   ];
   
-  // 停止所有不允许的或 hasContent=false 的 scrcpy 进程（menubar 除外）
+  // 停止所有不允许的或 hasContent=false 的 scrcpy 进程
   Object.keys(scrcpyProcesses).forEach(displayId => {
     const display = displays.find(d => d.displayId === displayId);
     if (display) {
-      const isMenubar = display.deviceName === 'NS_WINDOW_short_cut';
       const isAllowed = allowedDisplayTypes.includes(display.deviceName);
       
-      // 停止条件：不在允许列表中，或者 hasContent=false 且不是 menubar
+      // 停止条件：不在允许列表中，或者 hasContent=false
       if (!isAllowed) {
         console.log(`停止 displayId=${displayId} (不在允许列表中, deviceName=${display.deviceName})`);
         stopScrcpy(displayId);
-      } else if (!display.hasContent && !isMenubar) {
+      } else if (!display.hasContent) {
         console.log(`停止 displayId=${displayId} (hasContent=false, deviceName=${display.deviceName})`);
         stopScrcpy(displayId);
       }
     }
   });
   
-  // 查找 menubar (NS_WINDOW_short_cut) - 始终显示在下方（即使 hasContent=false）
+  // 查找 menubar (NS_WINDOW_short_cut) - 只有 hasContent=true 时才显示
   const menubarDisplay = displays.find(d => 
-    d.deviceName === 'NS_WINDOW_short_cut'
+    d.deviceName === 'NS_WINDOW_short_cut' && d.hasContent
   );
   
-  console.log('找到的 menubar:', menubarDisplay);
+  console.log('找到的 menubar (hasContent=true):', menubarDisplay);
   
-  // 处理 menubar - 始终启动（即使 hasContent=false）
+  // 处理 menubar - 只有 hasContent=true 时才启动
   if (menubarDisplay && !scrcpyProcesses[menubarDisplay.displayId]) {
-    console.log(`启动 menubar displayId=${menubarDisplay.displayId} (hasContent=${menubarDisplay.hasContent})`);
+    console.log(`启动 menubar displayId=${menubarDisplay.displayId}`);
     startScrcpy(currentDevice, menubarDisplay.displayId, 'bottom');
   }
   
@@ -623,19 +622,50 @@ async function updateDisplays() {
     console.log(`启动 center window displayId=${centerDisplay.displayId}, deviceName=${centerDisplay.deviceName}`);
     startScrcpy(currentDevice, centerDisplay.displayId, 'center');
   }
+  
+  // 检查所有允许的 display 类型是否都是 hasContent=false
+  const allowedDisplays = displays.filter(d => allowedDisplayTypes.includes(d.deviceName));
+  const allHasContentFalse = allowedDisplays.length > 0 && allowedDisplays.every(d => !d.hasContent);
+  
+  if (allHasContentFalse) {
+    console.log('所有允许的 displays 都是 hasContent=false，显示等待提示');
+    mainWindow?.webContents.send('show-waiting', 'Running now, wait plz...');
+  } else {
+    console.log('至少有一个 display 的 hasContent=true，隐藏等待提示');
+    mainWindow?.webContents.send('hide-waiting');
+  }
 }
 
 // IPC 监听器
-ipcMain.on('start-scrcpy', (event, deviceId) => {
+ipcMain.on('start-scrcpy', async (event, deviceId) => {
   if (!deviceId) {
     mainWindow?.webContents.send('show-hint', '请先选择设备');
     return;
   }
   startScrcpyMonitoring(deviceId);
+  
+  // 设置 persist.pvr.sleep_by_static 为 0
+  try {
+    await execAdbCommand(`adb -s ${deviceId} shell setprop persist.pvr.sleep_by_static 0`, { stdio: 'pipe' });
+    console.log('已设置 persist.pvr.sleep_by_static = 0');
+  } catch (error) {
+    console.error('设置 persist.pvr.sleep_by_static 失败:', error.message);
+  }
 });
 
-ipcMain.on('stop-scrcpy', () => {
+ipcMain.on('stop-scrcpy', async () => {
   stopAllScrcpy();
+  
+  // 设置 persist.pvr.sleep_by_static 为 1
+  if (currentDevice) {
+    try {
+      await execAdbCommand(`adb -s ${currentDevice} shell setprop persist.pvr.sleep_by_static 1`, { stdio: 'pipe' });
+      console.log('已设置 persist.pvr.sleep_by_static = 1');
+    } catch (error) {
+      console.error('设置 persist.pvr.sleep_by_static 失败:', error.message);
+    }
+  }
+  
   mainWindow?.webContents.send('show-hint', '已停止所有 scrcpy');
 });
 

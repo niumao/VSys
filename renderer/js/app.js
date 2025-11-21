@@ -232,6 +232,48 @@ function updateBatteryDisplay(batteryInfo) {
   if (scaleEl) scaleEl.textContent = batteryInfo.scale;
 }
 
+// 监听显示等待消息
+window.electronAPI.onShowWaiting((message) => {
+  console.log('显示等待消息:', message);
+  showWaitingMessage(message);
+});
+
+// 监听隐藏等待消息
+window.electronAPI.onHideWaiting(() => {
+  console.log('隐藏等待消息');
+  hideWaitingMessage();
+});
+
+// 显示等待消息
+function showWaitingMessage(message) {
+  const mainContent = document.querySelector('.main-content');
+  if (!mainContent) return;
+  
+  // 检查是否已存在等待消息元素
+  let waitingDiv = mainContent.querySelector('.waiting-message');
+  
+  if (!waitingDiv) {
+    // 创建等待消息元素
+    waitingDiv = document.createElement('div');
+    waitingDiv.className = 'waiting-message';
+    mainContent.appendChild(waitingDiv);
+  }
+  
+  waitingDiv.textContent = message;
+  waitingDiv.style.display = 'flex';
+}
+
+// 隐藏等待消息
+function hideWaitingMessage() {
+  const mainContent = document.querySelector('.main-content');
+  if (!mainContent) return;
+  
+  const waitingDiv = mainContent.querySelector('.waiting-message');
+  if (waitingDiv) {
+    waitingDiv.style.display = 'none';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // 初始化DOM元素引用
   timerBtn = document.getElementById('timer-btn');
