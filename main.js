@@ -520,7 +520,7 @@ function stopScrcpy(displayId) {
 }
 
 // 停止所有 scrcpy 进程
-function stopAllScrcpy() {
+function stopAllScrcpy(sendStateUpdate = true) {
   Object.keys(scrcpyProcesses).forEach(displayId => {
     stopScrcpy(displayId);
   });
@@ -530,14 +530,20 @@ function stopAllScrcpy() {
     clearInterval(displayCheckInterval);
     displayCheckInterval = null;
   }
+  
+  // 发送 scrcpy 状态更新到前端（如果需要）
+  if (sendStateUpdate && currentDevice) {
+    mainWindow?.webContents.send('scrcpy-state-changed', { deviceId: currentDevice, state: 'stopped' });
+  }
 }
 
 // 启动 scrcpy 监控
 async function startScrcpyMonitoring(deviceId) {
+  // 更新当前设备
   currentDevice = deviceId;
   
-  // 先停止之前的监控
-  stopAllScrcpy();
+  // 先停止之前的监控（不发送状态更新，因为我们马上要启动新的）
+  stopAllScrcpy(false);
   
   // 立即检查一次
   await updateDisplays();
@@ -548,6 +554,9 @@ async function startScrcpyMonitoring(deviceId) {
   }, 1000);
   
   mainWindow?.webContents.send('show-hint', `已开始监控设备 ${deviceId}`);
+  
+  // 发送 scrcpy 状态更新到前端
+  mainWindow?.webContents.send('scrcpy-state-changed', { deviceId, state: 'running' });
 }
 
 // 更新 display 显示状态

@@ -431,3 +431,22 @@ html {
 .battery-item:first-child #battery-level {
   font-size: 1.2em;
 }
+
+/* scrcpy 按钮状态样式 */
+#scrcpy-btn.stopped {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+#scrcpy-btn.running {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  animation: scrcpyPulse 2s ease-in-out infinite;
+}
+
+@keyframes scrcpyPulse {
+  0%, 100% { 
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 0 0 0 rgba(72, 187, 120, 0.4);
+  }
+  50% { 
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 0 0 6px rgba(72, 187, 120, 0);
+  }
+}

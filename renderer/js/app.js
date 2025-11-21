@@ -1,9 +1,11 @@
 let deviceTimerStates = {}; 
+let deviceScrcpyStates = {}; // scrcpy 状态存储 { deviceId: 'stopped' | 'running' }
 let currentDevice = null; 
 let timerInterval = null;
 
 let timerBtn;
 let devicesSelect;
+let scrcpyBtn;
 
 function initTimer() {
   devicesSelect.addEventListener('change', (e) => {
@@ -11,11 +13,19 @@ function initTimer() {
     if (newDevice === currentDevice || !newDevice) return;
 
     if (currentDevice) {
+      // 保存旧设备的状态
       saveCurrentDeviceState();
+      saveCurrentDeviceScrcpyState();
+      
+      // 停止旧设备的 scrcpy
+      window.electronAPI.stopScrcpy();
     }
 
     currentDevice = newDevice;
+    
+    // 恢复新设备的状态
     loadDeviceState(currentDevice);
+    loadDeviceScrcpyState(currentDevice);
     
     // 切换设备时更新电池监控
     if (newDevice) {
@@ -149,6 +159,52 @@ function updateTimerState(state) {
   timerBtn.disabled = false;
 }
 
+// scrcpy 状态管理函数
+function saveCurrentDeviceScrcpyState() {
+  if (!currentDevice) return;
+  
+  // 通过按钮状态判断是否正在运行
+  const isRunning = scrcpyBtn && scrcpyBtn.classList.contains('running');
+  deviceScrcpyStates[currentDevice] = isRunning ? 'running' : 'stopped';
+  
+  console.log(`保存设备 ${currentDevice} 的 scrcpy 状态: ${deviceScrcpyStates[currentDevice]}`);
+}
+
+function loadDeviceScrcpyState(deviceId) {
+  if (!deviceId) return;
+  
+  // 如果设备没有状态记录，初始化为 stopped
+  if (!deviceScrcpyStates[deviceId]) {
+    deviceScrcpyStates[deviceId] = 'stopped';
+  }
+  
+  const state = deviceScrcpyStates[deviceId];
+  console.log(`加载设备 ${deviceId} 的 scrcpy 状态: ${state}`);
+  
+  // 更新 UI
+  updateScrcpyButtonState(state);
+  
+  // 如果之前是运行状态，自动恢复
+  if (state === 'running') {
+    console.log(`自动恢复设备 ${deviceId} 的 scrcpy`);
+    window.electronAPI.startScrcpy(deviceId);
+  }
+}
+
+function updateScrcpyButtonState(state) {
+  if (!scrcpyBtn) return;
+  
+  scrcpyBtn.classList.remove('stopped', 'running');
+  scrcpyBtn.classList.add(state);
+  
+  // 更新按钮文本
+  if (state === 'running') {
+    scrcpyBtn.textContent = '投屏中';
+  } else {
+    scrcpyBtn.textContent = '启动投屏';
+  }
+}
+
 function updateDevicesSelect(devices) {
   const prevDevices = Object.keys(deviceTimerStates); // 之前已存在的设备
 
@@ -160,6 +216,10 @@ function updateDevicesSelect(devices) {
     clearInterval(timerInterval);
     // 停止电池监控
     window.electronAPI.stopBatteryMonitoring();
+    // 重置 scrcpy 按钮状态
+    if (scrcpyBtn) {
+      updateScrcpyButtonState('stopped');
+    }
     return;
   }
 
@@ -171,10 +231,13 @@ function updateDevicesSelect(devices) {
     devicesSelect.appendChild(option);
 
     if (!prevDevices.includes(device)) {
+      // 初始化新设备的 timer 状态
       deviceTimerStates[device] = {
         timestamps: 0,
         state: 'reset'
       };
+      // 初始化新设备的 scrcpy 状态
+      deviceScrcpyStates[device] = 'stopped';
     }
   });
 
@@ -183,7 +246,8 @@ function updateDevicesSelect(devices) {
   if (!currentDevice || !devices.includes(currentDevice)) {
     currentDevice = devices[0];
     devicesSelect.value = currentDevice;
-    loadDeviceState(currentDevice); // 加载默认设备状态
+    loadDeviceState(currentDevice); // 加载默认设备的 timer 状态
+    loadDeviceScrcpyState(currentDevice); // 加载默认设备的 scrcpy 状态
     // 启动电池监控
     window.electronAPI.startBatteryMonitoring(currentDevice);
   }
@@ -244,6 +308,17 @@ window.electronAPI.onHideWaiting(() => {
   hideWaitingMessage();
 });
 
+// 监听 scrcpy 状态更新
+window.electronAPI.onScrcpyStateChanged(({ deviceId, state }) => {
+  console.log(`收到 scrcpy 状态更新: 设备=${deviceId}, 状态=${state}`);
+  if (deviceScrcpyStates[deviceId] !== undefined) {
+    deviceScrcpyStates[deviceId] = state;
+    if (deviceId === currentDevice) {
+      updateScrcpyButtonState(state);
+    }
+  }
+});
+
 // 显示等待消息
 function showWaitingMessage(message) {
   const mainContent = document.querySelector('.main-content');
@@ -278,6 +353,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // 初始化DOM元素引用
   timerBtn = document.getElementById('timer-btn');
   devicesSelect = document.getElementById('wifi-devices');
+  scrcpyBtn = document.getElementById('scrcpy-btn');
+  
+  // 初始化 scrcpy 按钮默认状态
+  if (scrcpyBtn) {
+    updateScrcpyButtonState('stopped');
+  }
   
   initTimer();
   initScrcpy();
@@ -298,6 +379,9 @@ function initScrcpy() {
       }
       // 启动 scrcpy 监控
       window.electronAPI.startScrcpy(currentDevice);
+      // 更新状态
+      deviceScrcpyStates[currentDevice] = 'running';
+      updateScrcpyButtonState('running');
     });
   }
   
@@ -305,6 +389,11 @@ function initScrcpy() {
     stopScrcpyBtn.addEventListener('click', () => {
       // 停止所有 scrcpy
       window.electronAPI.stopScrcpy();
+      // 更新状态
+      if (currentDevice) {
+        deviceScrcpyStates[currentDevice] = 'stopped';
+        updateScrcpyButtonState('stopped');
+      }
     });
   }
   
