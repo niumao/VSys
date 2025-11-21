@@ -37,6 +37,7 @@ function execAdbCommand(command, options = {}, delayMs = 100, delayBefore = fals
       // 延迟后执行（delay and run）
       setTimeout(() => {
         try {
+          console.log('[CMD]', command);
           const result = execSync(command, options);
           resolve(result);
         } catch (error) {
@@ -46,6 +47,7 @@ function execAdbCommand(command, options = {}, delayMs = 100, delayBefore = fals
     } else {
       // 执行后延迟（run and delay）
       try {
+        console.log('[CMD]', command);
         const result = execSync(command, options);
         
         setTimeout(() => {
@@ -73,7 +75,9 @@ async function checkEnvironment() {
   
   // 检查 adb
   try {
+    console.log('[CMD] which adb');
     execSync('which adb', { stdio: 'pipe' });
+    console.log('[CMD] adb --version');
     const version = execSync('adb --version', { encoding: 'utf8' });
     status.adb.available = true;
     status.adb.message = `ADB 可用: ${version.split('\n')[0]}`;
@@ -85,7 +89,9 @@ async function checkEnvironment() {
   
   // 检查 scrcpy
   try {
+    console.log('[CMD] which scrcpy');
     execSync('which scrcpy', { stdio: 'pipe' });
+    console.log('[CMD] scrcpy --version');
     const version = execSync('scrcpy --version', { encoding: 'utf8' });
     status.scrcpy.available = true;
     status.scrcpy.message = `scrcpy 可用: ${version.split('\n')[0]}`;
@@ -419,7 +425,7 @@ function startScrcpy(deviceId, displayId, position = 'center') {
     '-s', deviceId
   ];
   
-  console.log('启动 scrcpy:', 'scrcpy', scrcpyArgs.join(' '));
+  console.log('[CMD] scrcpy', scrcpyArgs.join(' '));
   
   const scrcpyProcess = spawn('scrcpy', scrcpyArgs, {
     detached: false,
@@ -637,11 +643,13 @@ ipcMain.on('shutdown-app', async () => {
     setTimeout(() => {
       try {
         // Linux 系统关机命令
+        console.log('[CMD] shutdown now');
         execSync('shutdown now', { stdio: 'pipe' });
       } catch (error) {
         console.error('关闭电脑失败:', error.message);
         // 如果 shutdown 失败，尝试使用 poweroff
         try {
+          console.log('[CMD] poweroff');
           execSync('poweroff', { stdio: 'pipe' });
         } catch (e) {
           console.error('poweroff 也失败:', e.message);
@@ -656,6 +664,7 @@ ipcMain.on('shutdown-app', async () => {
     console.error('关闭应用失败:', error.message);
     // 即使失败也尝试关闭电脑
     try {
+      console.log('[CMD] shutdown now');
       execSync('shutdown now', { stdio: 'pipe' });
     } catch (e) {
       console.error('关闭电脑失败:', e.message);
@@ -819,3 +828,4 @@ ipcMain.on('quit-current-app', (event, deviceId) => {
   }
   quitCurrentApp(deviceId);
 });
+                                              
