@@ -24,7 +24,7 @@ if (!app.isPackaged) {
 let wifiDevices = [];
 let mainWindow;
 let processingDevices = new Set(); // 正在处理的设备集合
-let scrcpyProcesses = {}; // 存储 scrcpy 进程 { displayId: process }
+let scrcpyProcesses = {}; // 存储 scrcpy 进程 { deviceId: { displayId: process } }
 let displayCheckInterval = null; // display 状态检查定时器
 let currentDevice = null; // 当前选中的设备
 let batteryCheckInterval = null; // 电池状态检查定时器
@@ -441,9 +441,14 @@ async function checkDisplayContent(deviceId) {
 
 // 启动 scrcpy 进程
 function startScrcpy(deviceId, displayId, position = 'center') {
-  // 如果已经在运行，先停止
-  if (scrcpyProcesses[displayId]) {
-    stopScrcpy(displayId);
+  // 初始化设备的进程对象
+  if (!scrcpyProcesses[deviceId]) {
+    scrcpyProcesses[deviceId] = {};
+  }
+  
+  // 如果该设备的这个 display 已经在运行，先停止
+  if (scrcpyProcesses[deviceId][displayId]) {
+    stopScrcpy(deviceId, displayId);
   }
   
   // 获取主窗口位置和大小
@@ -492,52 +497,90 @@ function startScrcpy(deviceId, displayId, position = 'center') {
   });
   
   scrcpyProcess.on('error', (error) => {
-    console.error(`scrcpy 启动失败 (displayId=${displayId}):`, error.message);
+    console.error(`scrcpy 启动失败 (device=${deviceId}, displayId=${displayId}):`, error.message);
     mainWindow?.webContents.send('show-hint', `scrcpy 启动失败: ${error.message}`);
   });
   
   scrcpyProcess.on('exit', (code) => {
-    console.log(`scrcpy 进程退出 (displayId=${displayId}), 退出码: ${code}`);
-    delete scrcpyProcesses[displayId];
+    console.log(`scrcpy 进程退出 (device=${deviceId}, displayId=${displayId}), 退出码: ${code}`);
+    if (scrcpyProcesses[deviceId]) {
+      delete scrcpyProcesses[deviceId][displayId];
+      // 如果该设备没有任何进程了，删除设备对象
+      if (Object.keys(scrcpyProcesses[deviceId]).length === 0) {
+        delete scrcpyProcesses[deviceId];
+      }
+    }
   });
   
-  scrcpyProcesses[displayId] = scrcpyProcess;
+  scrcpyProcesses[deviceId][displayId] = scrcpyProcess;
   mainWindow?.webContents.send('show-hint', `已启动 display ${displayId}`);
 }
 
 // 停止 scrcpy 进程
-function stopScrcpy(displayId) {
-  const process = scrcpyProcesses[displayId];
-  if (process) {
-    try {
-      process.kill();
-      delete scrcpyProcesses[displayId];
-      console.log(`已停止 scrcpy (displayId=${displayId})`);
-    } catch (error) {
-      console.error(`停止 scrcpy 失败 (displayId=${displayId}):`, error.message);
+function stopScrcpy(deviceId, displayId) {
+  if (!scrcpyProcesses[deviceId] || !scrcpyProcesses[deviceId][displayId]) {
+    return;
+  }
+  
+  const process = scrcpyProcesses[deviceId][displayId];
+  try {
+    process.kill();
+    delete scrcpyProcesses[deviceId][displayId];
+    
+    // 如果该设备没有任何进程了，删除设备对象
+    if (Object.keys(scrcpyProcesses[deviceId]).length === 0) {
+      delete scrcpyProcesses[deviceId];
     }
+    
+    console.log(`已停止 scrcpy (device=${deviceId}, displayId=${displayId})`);
+  } catch (error) {
+    console.error(`停止 scrcpy 失败 (device=${deviceId}, displayId=${displayId}):`, error.message);
   }
 }
 
-// 停止所有 scrcpy 进程
-function stopAllScrcpy(sendStateUpdate = true) {
-  console.log(`[stopAllScrcpy] 开始停止，进程数: ${Object.keys(scrcpyProcesses).length}, 定时器存在: ${!!displayCheckInterval}`);
+// 停止所有 scrcpy 进程（或指定设备的所有进程）
+async function stopAllScrcpy(sendStateUpdate = true, specificDevice = null) {
+  const deviceToStop = specificDevice || currentDevice;
+  
+  console.log(`[stopAllScrcpy] 开始停止，目标设备: ${deviceToStop || '所有设备'}`);
   
   // 1️⃣ 先停止并清除定时器（最重要！）
   if (displayCheckInterval) {
     console.log(`[stopAllScrcpy] 清除定时器，ID: ${displayCheckInterval}`);
     clearInterval(displayCheckInterval);
     displayCheckInterval = null; // 立即设置为 null，防止回调执行
+    
+    // 2️⃣ 等待 1100ms，确保正在执行的定时器回调完成
+    console.log(`[stopAllScrcpy] 等待 1100ms，确保定时器回调完成...`);
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    console.log(`[stopAllScrcpy] 等待完成，现在安全停止进程`);
   } else {
     console.log(`[stopAllScrcpy] 没有定时器需要清除`);
   }
   
-  // 2️⃣ 然后停止所有 scrcpy 进程
-  Object.keys(scrcpyProcesses).forEach(displayId => {
-    stopScrcpy(displayId);
-  });
+  // 3️⃣ 停止进程
+  if (deviceToStop) {
+    // 停止指定设备的所有 scrcpy 进程
+    if (scrcpyProcesses[deviceToStop]) {
+      console.log(`[stopAllScrcpy] 停止设备 ${deviceToStop} 的 ${Object.keys(scrcpyProcesses[deviceToStop]).length} 个进程`);
+      Object.keys(scrcpyProcesses[deviceToStop]).forEach(displayId => {
+        stopScrcpy(deviceToStop, displayId);
+      });
+    } else {
+      console.log(`[stopAllScrcpy] 设备 ${deviceToStop} 没有运行中的进程`);
+    }
+  } else {
+    // 停止所有设备的所有 scrcpy 进程
+    const totalDevices = Object.keys(scrcpyProcesses).length;
+    console.log(`[stopAllScrcpy] 停止所有设备 (${totalDevices} 个设备) 的进程`);
+    Object.keys(scrcpyProcesses).forEach(deviceId => {
+      Object.keys(scrcpyProcesses[deviceId]).forEach(displayId => {
+        stopScrcpy(deviceId, displayId);
+      });
+    });
+  }
   
-  // 3️⃣ 发送 scrcpy 状态更新到前端（如果需要）
+  // 4️⃣ 发送 scrcpy 状态更新到前端（如果需要）
   if (sendStateUpdate && currentDevice) {
     console.log(`[stopAllScrcpy] 发送状态更新到前端: ${currentDevice} -> stopped`);
     mainWindow?.webContents.send('scrcpy-state-changed', { deviceId: currentDevice, state: 'stopped' });
@@ -551,7 +594,7 @@ async function startScrcpyMonitoring(deviceId) {
   console.log(`[startScrcpyMonitoring] 开始为设备 ${deviceId} 启动监控`);
   
   // 先停止之前的监控（不发送状态更新，因为我们马上要启动新的）
-  stopAllScrcpy(false);
+  await stopAllScrcpy(false);
   
   // 确保定时器已被清除
   if (displayCheckInterval) {
@@ -601,8 +644,13 @@ async function updateDisplays() {
     'NS_WINDOW_short_cut'
   ];
   
+  // 初始化该设备的进程对象
+  if (!scrcpyProcesses[currentDevice]) {
+    scrcpyProcesses[currentDevice] = {};
+  }
+  
   // 停止所有不允许的或 hasContent=false 的 scrcpy 进程
-  Object.keys(scrcpyProcesses).forEach(displayId => {
+  Object.keys(scrcpyProcesses[currentDevice]).forEach(displayId => {
     const display = displays.find(d => d.displayId === displayId);
     if (display) {
       const isAllowed = allowedDisplayTypes.includes(display.deviceName);
@@ -610,10 +658,10 @@ async function updateDisplays() {
       // 停止条件：不在允许列表中，或者 hasContent=false
       if (!isAllowed) {
         console.log(`停止 displayId=${displayId} (不在允许列表中, deviceName=${display.deviceName})`);
-        stopScrcpy(displayId);
+        stopScrcpy(currentDevice, displayId);
       } else if (!display.hasContent) {
         console.log(`停止 displayId=${displayId} (hasContent=false, deviceName=${display.deviceName})`);
-        stopScrcpy(displayId);
+        stopScrcpy(currentDevice, displayId);
       }
     }
   });
@@ -626,7 +674,7 @@ async function updateDisplays() {
   console.log('找到的 menubar (hasContent=true):', menubarDisplay);
   
   // 处理 menubar - 只有 hasContent=true 时才启动
-  if (menubarDisplay && !scrcpyProcesses[menubarDisplay.displayId]) {
+  if (menubarDisplay && !scrcpyProcesses[currentDevice][menubarDisplay.displayId]) {
     console.log(`启动 menubar displayId=${menubarDisplay.displayId}`);
     startScrcpy(currentDevice, menubarDisplay.displayId, 'bottom');
   }
@@ -657,14 +705,14 @@ async function updateDisplays() {
   
   // 停止所有不是当前选中的 center displays
   allCenterDisplays.forEach(d => {
-    if ((!centerDisplay || d.displayId !== centerDisplay.displayId) && scrcpyProcesses[d.displayId]) {
+    if ((!centerDisplay || d.displayId !== centerDisplay.displayId) && scrcpyProcesses[currentDevice][d.displayId]) {
       console.log(`停止 center display displayId=${d.displayId}, deviceName=${d.deviceName} (不是当前选中的)`);
-      stopScrcpy(d.displayId);
+      stopScrcpy(currentDevice, d.displayId);
     }
   });
   
   // 启动当前选中的 center display
-  if (centerDisplay && !scrcpyProcesses[centerDisplay.displayId]) {
+  if (centerDisplay && !scrcpyProcesses[currentDevice][centerDisplay.displayId]) {
     console.log(`启动 center window displayId=${centerDisplay.displayId}, deviceName=${centerDisplay.deviceName}`);
     startScrcpy(currentDevice, centerDisplay.displayId, 'center');
   }
@@ -708,7 +756,7 @@ ipcMain.on('start-scrcpy', async (event, deviceId) => {
 });
 
 ipcMain.on('stop-scrcpy', async () => {
-  stopAllScrcpy();
+  await stopAllScrcpy();
   
   // 设置 persist.pvr.sleep_by_static 为 1
   if (currentDevice) {
@@ -729,7 +777,7 @@ ipcMain.on('shutdown-app', async () => {
     mainWindow?.webContents.send('show-hint', '正在关闭所有设备...');
     
     // 1. 停止所有 scrcpy 进程
-    stopAllScrcpy();
+    await stopAllScrcpy();
     
     // 2. 停止电池监控
     stopBatteryMonitoring();
