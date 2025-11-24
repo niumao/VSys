@@ -260,6 +260,14 @@ async function connectDeviceViaWifi(usbDeviceId) {
       console.error('设置 persist.pvr.wifi.auto_connect 失败:', error.message);
     }
     
+    // 设置电池为 USB 模式（防止 WiFi 断连）
+    try {
+      await execAdbCommand(`adb -s ${wifiDeviceId} shell dumpsys battery set usb 1`, { stdio: 'pipe' });
+      console.log('已设置 battery usb = 1 (防止WiFi断连)');
+    } catch (error) {
+      console.error('设置 battery usb 失败:', error.message);
+    }
+    
     setTimeout(refreshWifiDevices, 1000);
   } catch (error) {
     console.error('WiFi连接失败:', error.message);
@@ -342,14 +350,18 @@ function monitorUsbDevices() {
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1024,
+    height: 600,
     frame: false,
+    fullscreen: false, // Set to true for kiosk mode on station deployment
     webPreferences: { preload: path.join(__dirname, 'preload.js'), }
   });
 
   mainWindow.loadFile('index.html');
   //mainWindow.webContents.openDevTools();
+  
+  // Maximize window for station deployment
+  mainWindow.maximize();
 
   // 检查环境依赖
   const envOk = await handleEnvironmentCheck();
@@ -764,6 +776,14 @@ ipcMain.on('start-scrcpy', async (event, deviceId) => {
   } catch (error) {
     console.error('设置 persist.pvr.sleep_by_static 失败:', error.message);
   }
+  
+  // // 设置电池为 USB 模式（防止 WiFi 断连）
+  // try {
+  //   await execAdbCommand(`adb -s ${deviceId} shell dumpsys battery set usb 1`, { stdio: 'pipe' });
+  //   console.log('已设置 battery usb = 1 (防止WiFi断连)');
+  // } catch (error) {
+  //   console.error('设置 battery usb 失败:', error.message);
+  // }
 });
 
 ipcMain.on('stop-scrcpy', async () => {
