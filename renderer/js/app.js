@@ -1,163 +1,131 @@
-let deviceTimerStates = {}; 
-let deviceScrcpyStates = {}; // scrcpy 状态存储 { deviceId: 'stopped' | 'running' }
+// Single device state management
 let currentDevice = null; 
 let timerInterval = null;
+let timerState = {
+  timestamps: 0,
+  startTime: 0, // Store original start time
+  state: 'reset', // 'reset' | 'running' | 'paused'
+  pausedDisplay: 'elapsed' // 'elapsed' | 'start' - toggle in paused state
+};
+let scrcpyState = 'stopped'; // 'stopped' | 'running'
+let lastClickTime = 0; // For double-click detection
 
 let timerBtn;
-let devicesSelect;
+let deviceStatusEl;
 let scrcpyBtn;
 
 function initTimer() {
-  devicesSelect.addEventListener('change', async (e) => {
-    const newDevice = e.target.value;
-    if (newDevice === currentDevice || !newDevice) return;
-
-    if (currentDevice) {
-      // 1. 先保存旧设备的状态（在停止之前）
-      saveCurrentDeviceState();
-      saveCurrentDeviceScrcpyState();
-      
-      // 2. 停止旧设备的 scrcpy
-      window.electronAPI.stopScrcpy();
-      
-      // 3. 等待一小段时间，确保后端完全停止（清除定时器）
-      await new Promise(resolve => setTimeout(resolve, 150));
-    }
-
-    currentDevice = newDevice;
-    
-    // 4. 恢复新设备的状态
-    loadDeviceState(currentDevice);
-    
-    // 5. 延迟一下再恢复 scrcpy 状态，确保旧设备的 scrcpy 完全停止
-    setTimeout(() => {
-      loadDeviceScrcpyState(currentDevice);
-    }, 50);
-    
-    // 切换设备时更新电池监控
-    if (newDevice) {
-      window.electronAPI.startBatteryMonitoring(newDevice);
-    } else {
-      window.electronAPI.stopBatteryMonitoring();
-    }
-  });
-
   timerBtn.addEventListener('click', () => {
     if (!currentDevice) return;
 
-    const currentState = deviceTimerStates[currentDevice]?.state || 'reset';
-    switch (currentState) {
+    const now = Date.now();
+    const timeSinceLastClick = now - lastClickTime;
+    
+    switch (timerState.state) {
       case 'reset':
         // 重置状态 → 开始计时
         startTimer();
+        lastClickTime = now;
         break;
       case 'running':
         // 运行中 → 暂停计时
         pauseTimer();
+        lastClickTime = now;
         break;
       case 'paused':
-        // 已暂停 → 重置
-        resetCurrentDeviceTimer();
+        // 已暂停 → 双击重置 or 单击切换显示
+        if (timeSinceLastClick < 500) {
+          // 双击检测：500ms内两次点击
+          resetTimer();
+        } else {
+          // 单击：切换显示 (elapsed ↔ start)
+          togglePausedDisplay();
+        }
+        lastClickTime = now;
         break;
     }
   });
 }
 
-function saveCurrentDeviceState() {
+function startTimer() {
   if (!currentDevice) return;
 
-  const state = deviceTimerStates[currentDevice] || { timestamps: 0, state: 'reset' };
-  deviceTimerStates[currentDevice] = {
-    timestamps: state.state === 'running' ? getCurrentTimestamps() : state.timestamps,
-    state: timerInterval ? 'running' : state.state 
-  };
-}
-
-function loadDeviceState(deviceId) {
-  clearInterval(timerInterval);
-  timerInterval = null;
-
-  if (!deviceTimerStates[deviceId]) {
-    deviceTimerStates[deviceId] = {
-      timestamps: 0,
-      state: 'reset'
-    };
-  }
-
-  const state = deviceTimerStates[deviceId];
-  updateTimerDisplay(state.timestamps);
-  updateTimerState(state.state);
-
-  if (state.state === 'running') {
-    startTimer(true); // 传入true表示从保存的时间戳继续
-  }
-}
-
-function startTimer(isResume = false) {
-  if (!currentDevice) return;
-
-  const state = deviceTimerStates[currentDevice];
-  if (!isResume) {
-    // 从reset开始，记录开始时间戳
-    state.timestamps = Date.now();
-  } else {
-    // 从paused恢复，调整开始时间戳以保留已经过的时间
-    const elapsedMs = state.timestamps;
-    state.timestamps = Date.now() - elapsedMs;
-  }
-
-  state.state = 'running';
+  // 记录开始时间戳
+  timerState.timestamps = Date.now();
+  timerState.startTime = Date.now(); // Save original start time
+  timerState.state = 'running';
   updateTimerState('running');
   
+  // 显示开始时间
+  updateTimerDisplay(timerState.timestamps, 'start');
+  
   timerInterval = setInterval(() => {
-    const elapsedMs = Date.now() - state.timestamps;
-    updateTimerDisplay(elapsedMs);
-  }, 100);
+    // Keep showing start time
+    updateTimerDisplay(timerState.startTime, 'start');
+  }, 1000);
 }
 
 function pauseTimer() {
   if (!currentDevice) return;
 
-  const state = deviceTimerStates[currentDevice];
   clearInterval(timerInterval);
   timerInterval = null;
   
-  // 保存已经过的毫秒数
-  const elapsedMs = Date.now() - state.timestamps;
-  state.timestamps = elapsedMs;
-  state.state = 'paused';
+  // 计算已经过的毫秒数
+  const elapsedMs = Date.now() - timerState.timestamps;
+  timerState.timestamps = elapsedMs;
+  timerState.state = 'paused';
+  timerState.pausedDisplay = 'elapsed'; // Default to showing elapsed time
   updateTimerState('paused');
-  updateTimerDisplay(elapsedMs); 
+  
+  // 显示经过的时间
+  updateTimerDisplay(elapsedMs, 'elapsed'); 
 }
 
-function resetCurrentDeviceTimer() {
+function resetTimer() {
   if (!currentDevice) return;
 
   clearInterval(timerInterval);
   timerInterval = null;
-  const state = deviceTimerStates[currentDevice];
-  state.timestamps = 0;
-  state.state = 'reset';
+  timerState.timestamps = 0;
+  timerState.startTime = 0;
+  timerState.state = 'reset';
+  timerState.pausedDisplay = 'elapsed';
   updateTimerState('reset');
-  updateTimerDisplay(0);
+  updateTimerDisplay(0, 'reset');
 }
 
-function getCurrentTimestamps() {
-  const state = deviceTimerStates[currentDevice];
-  if (!state) return 0;
+function togglePausedDisplay() {
+  if (timerState.state !== 'paused') return;
   
-  if (state.state === 'running') {
-    return Date.now() - state.timestamps;
+  // Toggle between elapsed and start
+  if (timerState.pausedDisplay === 'elapsed') {
+    timerState.pausedDisplay = 'start';
+    updateTimerDisplay(timerState.startTime, 'start');
+  } else {
+    timerState.pausedDisplay = 'elapsed';
+    updateTimerDisplay(timerState.timestamps, 'elapsed');
   }
-  return state.timestamps;
 }
 
-function updateTimerDisplay(milliseconds) {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
-  const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
-  const secs = (totalSeconds % 60).toString().padStart(2, '0');
-  timerBtn.textContent = `${hours}:${minutes}:${secs}`;
+function updateTimerDisplay(value, mode) {
+  if (mode === 'reset') {
+    timerBtn.textContent = '00:00:00';
+  } else if (mode === 'start') {
+    // Display start time (timestamp)
+    const startDate = new Date(value);
+    const hours = startDate.getHours().toString().padStart(2, '0');
+    const minutes = startDate.getMinutes().toString().padStart(2, '0');
+    const seconds = startDate.getSeconds().toString().padStart(2, '0');
+    timerBtn.textContent = `Start: ${hours}:${minutes}:${seconds}`;
+  } else if (mode === 'elapsed') {
+    // Display elapsed time (milliseconds)
+    const totalSeconds = Math.floor(value / 1000);
+    const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+    const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+    const secs = (totalSeconds % 60).toString().padStart(2, '0');
+    timerBtn.textContent = `Time: ${hours}:${minutes}:${secs}`;
+  }
 }
 
 function updateTimerState(state) {
@@ -166,41 +134,10 @@ function updateTimerState(state) {
   timerBtn.disabled = false;
 }
 
-// scrcpy 状态管理函数
-function saveCurrentDeviceScrcpyState() {
-  if (!currentDevice) return;
-  
-  // 通过按钮状态判断是否正在运行
-  const isRunning = scrcpyBtn && scrcpyBtn.classList.contains('running');
-  deviceScrcpyStates[currentDevice] = isRunning ? 'running' : 'stopped';
-  
-  console.log(`保存设备 ${currentDevice} 的 scrcpy 状态: ${deviceScrcpyStates[currentDevice]}`);
-}
-
-function loadDeviceScrcpyState(deviceId) {
-  if (!deviceId) return;
-  
-  // 如果设备没有状态记录，初始化为 stopped
-  if (!deviceScrcpyStates[deviceId]) {
-    deviceScrcpyStates[deviceId] = 'stopped';
-  }
-  
-  const state = deviceScrcpyStates[deviceId];
-  console.log(`加载设备 ${deviceId} 的 scrcpy 状态: ${state}`);
-  
-  // 更新 UI
-  updateScrcpyButtonState(state);
-  
-  // 如果之前是运行状态，自动恢复
-  if (state === 'running') {
-    console.log(`自动恢复设备 ${deviceId} 的 scrcpy`);
-    window.electronAPI.startScrcpy(deviceId);
-  }
-}
-
 function updateScrcpyButtonState(state) {
   if (!scrcpyBtn) return;
   
+  scrcpyState = state;
   scrcpyBtn.classList.remove('stopped', 'running');
   scrcpyBtn.classList.add(state);
   
@@ -213,11 +150,8 @@ function updateScrcpyButtonState(state) {
 }
 
 function updateDevicesSelect(devices) {
-  const prevDevices = Object.keys(deviceTimerStates); // 之前已存在的设备
-
   if (devices.length === 0) {
-    devicesSelect.innerHTML = '<option value="">无设备</option>';
-    devicesSelect.disabled = true;
+    deviceStatusEl.textContent = '无设备连接';
     timerBtn.disabled = true;
     currentDevice = null;
     clearInterval(timerInterval);
@@ -230,31 +164,24 @@ function updateDevicesSelect(devices) {
     return;
   }
 
-  devicesSelect.innerHTML = '';
-  devices.forEach(device => {
-    const option = document.createElement('option');
-    option.value = device;
-    option.textContent = device;
-    devicesSelect.appendChild(option);
-
-    if (!prevDevices.includes(device)) {
-      // 初始化新设备的 timer 状态
-      deviceTimerStates[device] = {
-        timestamps: 0,
-        state: 'reset'
-      };
-      // 初始化新设备的 scrcpy 状态
-      deviceScrcpyStates[device] = 'stopped';
-    }
-  });
-
-  devicesSelect.disabled = false;
+  // Single device mode - use the first (and only) device
+  const device = devices[0];
+  deviceStatusEl.textContent = `已连接: ${device}`;
   
-  if (!currentDevice || !devices.includes(currentDevice)) {
-    currentDevice = devices[0];
-    devicesSelect.value = currentDevice;
-    loadDeviceState(currentDevice); // 加载默认设备的 timer 状态
-    loadDeviceScrcpyState(currentDevice); // 加载默认设备的 scrcpy 状态
+  // If this is a new device connection
+  if (!currentDevice || currentDevice !== device) {
+    currentDevice = device;
+    timerBtn.disabled = false;
+    
+    // Initialize timer state
+    if (timerState.state === 'reset') {
+      updateTimerDisplay(0, 'reset');
+      updateTimerState('reset');
+    }
+    
+    // Initialize scrcpy state
+    updateScrcpyButtonState('stopped');
+    
     // 启动电池监控
     window.electronAPI.startBatteryMonitoring(currentDevice);
   }
@@ -320,12 +247,8 @@ window.electronAPI.onScrcpyStateChanged(({ deviceId, state }) => {
   console.log(`收到 scrcpy 状态更新: 设备=${deviceId}, 状态=${state}`);
   
   // 只有当更新的是当前设备时，才同步状态
-  // 这样可以避免在切换设备时，旧设备的停止消息覆盖已保存的状态
   if (deviceId === currentDevice) {
-    if (deviceScrcpyStates[deviceId] !== undefined) {
-      deviceScrcpyStates[deviceId] = state;
-      updateScrcpyButtonState(state);
-    }
+    updateScrcpyButtonState(state);
   }
 });
 
@@ -362,13 +285,16 @@ function hideWaitingMessage() {
 document.addEventListener('DOMContentLoaded', () => {
   // 初始化DOM元素引用
   timerBtn = document.getElementById('timer-btn');
-  devicesSelect = document.getElementById('wifi-devices');
+  deviceStatusEl = document.getElementById('device-status');
   scrcpyBtn = document.getElementById('scrcpy-btn');
   
   // 初始化 scrcpy 按钮默认状态
   if (scrcpyBtn) {
     updateScrcpyButtonState('stopped');
   }
+  
+  // 初始化 timer 显示
+  updateTimerDisplay(0, 'reset');
   
   initTimer();
   initScrcpy();
@@ -390,7 +316,6 @@ function initScrcpy() {
       // 启动 scrcpy 监控
       window.electronAPI.startScrcpy(currentDevice);
       // 更新状态
-      deviceScrcpyStates[currentDevice] = 'running';
       updateScrcpyButtonState('running');
     });
   }
@@ -400,10 +325,7 @@ function initScrcpy() {
       // 停止所有 scrcpy
       window.electronAPI.stopScrcpy();
       // 更新状态
-      if (currentDevice) {
-        deviceScrcpyStates[currentDevice] = 'stopped';
-        updateScrcpyButtonState('stopped');
-      }
+      updateScrcpyButtonState('stopped');
     });
   }
   
@@ -425,3 +347,23 @@ function initScrcpy() {
     });
   }
 }
+
+// window.testTimerRunning30Min = () => {
+//   currentDevice = 'test-device';
+//   const startTime = Date.now() - (30 * 60 * 1000); // 30 minutes ago
+//   timerState.timestamps = startTime;
+//   timerState.startTime = startTime;
+//   timerState.state = 'running';
+//   updateTimerState('running');
+//   updateTimerDisplay(startTime, 'start');
+  
+//   if (timerInterval) clearInterval(timerInterval);
+//   timerInterval = setInterval(() => {
+//     updateTimerDisplay(timerState.startTime, 'start');
+//   }, 1000);
+  
+//   console.log('✓ Timer set to RUNNING state (started 30 minutes ago)');
+//   console.log(`  Start time: ${new Date(startTime).toLocaleTimeString()}`);
+// };
+
+// console.log('Test function loaded: testTimerRunning30Min()');

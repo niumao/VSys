@@ -512,6 +512,13 @@ function startScrcpy(deviceId, displayId, position = 'center') {
     '-s', deviceId
   ];
   
+  // DisplayID=0 is a mirror display showing only right half
+  // Crop to show right half: assuming 3840x2160 total, right half is 1920:2160:1920:0
+  if (displayId === '0') {
+    scrcpyArgs.splice(1, 0, '--crop=1920:2160:1920:0');
+    console.log(`[DisplayID=0] 应用右半屏幕裁剪 (crop right half)`);
+  }
+  
   console.log('[CMD] scrcpy', scrcpyArgs.join(' '));
   
   const scrcpyProcess = spawn('scrcpy', scrcpyArgs, {
@@ -745,10 +752,18 @@ async function updateDisplays() {
   const allHasContentFalse = allowedDisplays.length > 0 && allowedDisplays.every(d => !d.hasContent);
   
   if (allHasContentFalse) {
-    console.log('所有允许的 displays 都是 hasContent=false，显示等待提示');
-    mainWindow?.webContents.send('show-waiting', 'Running now, wait plz...');
+    console.log('所有允许的 displays 都是 hasContent=false，启动 displayID=0');
+    // 启动 displayID=0 (如果还没有启动)
+    if (!scrcpyProcesses[currentDevice] || !scrcpyProcesses[currentDevice]['0']) {
+      startScrcpy(currentDevice, '0', 'center');
+    }
+    mainWindow?.webContents.send('hide-waiting');
   } else {
-    console.log('至少有一个 display 的 hasContent=true，隐藏等待提示');
+    console.log('至少有一个 display 的 hasContent=true，停止 displayID=0');
+    // 停止 displayID=0 (如果正在运行)
+    if (scrcpyProcesses[currentDevice] && scrcpyProcesses[currentDevice]['0']) {
+      stopScrcpy(currentDevice, '0');
+    }
     mainWindow?.webContents.send('hide-waiting');
   }
 }
